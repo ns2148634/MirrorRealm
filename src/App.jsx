@@ -22,12 +22,13 @@ const DESK_ITEMS = [
 function App() {
   // --- 1. PWA 與系統狀態 ---
   const [activeIdx, setActiveIdx] = useState(2);
-  const [time, setTime] = useState('day');
-  const [scale, setScale] = useState(1);
+  const [timeProgress, setTimeProgress] = useState(0); // 0 = 中午, 0.5 = 日落, 1 = 午夜
   const [view, setView] = useState('room');
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallAlert, setShowInstallAlert] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const containerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(480);
 
   // --- 2. 玩家屬性狀態 ---
   const [stats, setStats] = useState({
@@ -40,6 +41,12 @@ function App() {
   const recoveryRate = useMemo(() => getStaminaRecoveryRate(currentAge), [currentAge]);
   const spiritResult = useMemo(() => calculateSpiritRoot(stats.affinities), [stats.affinities]);
   const nextGenBonus = useMemo(() => Math.floor(stats.money / 3000), [stats.money]);
+
+  // 計算日夜漸變值
+  const dayPhase = useMemo(() => {
+    // 0 = 完全白天, 0.5 = 日落, 1 = 完全黑夜
+    return Math.sin(timeProgress * Math.PI);
+  }, [timeProgress]);
 
   // --- 4. 系統初始化與 PWA 偵測 ---
   useEffect(() => {
@@ -55,19 +62,23 @@ function App() {
       e.preventDefault();
       setDeferredPrompt(e);
       if (!isStandalone) {
-        setTimeout(() => setShowInstallAlert(true), 3000); // 延遲顯示，增加儀式感
+        setTimeout(() => setShowInstallAlert(true), 3000);
       }
     };
 
-    // 若是 iOS 且未安裝，直接顯示提醒
     if (isIOSDevice && !isStandalone) {
       setTimeout(() => setShowInstallAlert(true), 4000);
     }
 
-    const handleResize = () => setScale(Math.min(window.innerWidth / 480, window.innerHeight / 854) * 0.95);
-    handleResize();
-    
-    window.addEventListener('resize', handleResize);
+    // 容器寬度偵測
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth);
+      }
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     // 遊戲主循環計時器
@@ -80,10 +91,13 @@ function App() {
       });
     }, 1000);
 
-    const dayNightTimer = setInterval(() => setTime(p => p === 'day' ? 'night' : 'day'), 30000);
+    // 日夜循環 - 每分鐘一個週期 (0 -> 1 -> 0)
+    const dayNightTimer = setInterval(() => {
+      setTimeProgress(p => (p + 0.02) % 1);
+    }, 60000);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', updateWidth);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       clearInterval(timer);
       clearInterval(dayNightTimer);
@@ -109,11 +123,21 @@ function App() {
 
   const assetPath = '/assets/mortal';
 
+  // 計算卡片間距 (根據螢幕寬度動態調整)
+  const cardGap = Math.min(containerWidth * 0.28, 110);
+  const isNight = dayPhase > 0.3;
+
   return (
     <div className="fixed inset-0 bg-stone-950 flex justify-center items-center overflow-hidden font-serif select-none text-stone-200">
       <style>{`
         @keyframes sway { 0%, 100% { transform: translate(0px, 0px) scale(1.1); } 50% { transform: translate(10px, 5px) scale(1.15); } }
         .animate-sway { animation: sway 15s ease-in-out infinite; }
+        .day-night-overlay {
+          transition: opacity 3s ease-in-out;
+        }
+        .slide-transition {
+          transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), filter 0.4s ease;
+        }
       `}</style>
 
       {/* --- PWA 入世提醒彈窗 --- */}
@@ -151,70 +175,82 @@ function App() {
         )}
       </AnimatePresence>
 
-      <div style={{ width: '480px', height: '854px', transform: `scale(${scale})` }} className="relative bg-stone-900 overflow-hidden border-4 border-stone-800 flex flex-col shadow-2xl">
-
+      {/* 主容器 - 響應式寬度 */}
+      <div 
+        ref={containerRef}
+        className="relative w-full max-w-[480px] h-full sm:h-[854px] max-h-full bg-stone-900 overflow-hidden border-4 border-stone-800 flex flex-col shadow-2xl"
+      >
         {/* --- 上方 75%：環境敘事區 --- */}
         <div className="relative w-full h-[75%] z-0 border-b-2 border-stone-950 overflow-hidden">
+          {/* 背景圖 + 日夜漸變遮罩 */}
           <img src={`${assetPath}/view-day.jpg`} className="absolute inset-0 w-full h-full object-cover object-bottom" alt="view" />
-          <div className={`absolute inset-0 bg-[#0f172a] mix-blend-multiply transition-opacity duration-[5000ms] ${time === 'night' ? 'opacity-90' : 'opacity-0'}`} />
+          <div 
+            className="absolute inset-0 day-night-overlay"
+            style={{ 
+              background: `linear-gradient(to bottom, 
+                rgba(15, 23, 42, ${dayPhase * 0.85}) 0%, 
+                rgba(15, 23, 42, ${dayPhase * 0.7}) 50%, 
+                rgba(15, 23, 42, ${dayPhase * 0.5}) 100%)`,
+              opacity: dayPhase > 0 ? 1 : 0
+            }} 
+          />
           <img src={`${assetPath}/wall.png`} className="absolute inset-0 w-full h-full object-cover object-bottom z-10 pointer-events-none" alt="wall" />
 
-          {/* HUD (狀態天碑) */}
-          <header className="absolute top-0 left-0 w-full p-6 flex justify-between z-30 pointer-events-none">
-            <div className="bg-black/30 p-3 rounded-2xl backdrop-blur-md border border-white/5 shadow-xl pointer-events-auto">
-              <h1 className="text-2xl font-bold tracking-widest text-white">{stats.name}</h1>
-              <p className="text-amber-500 font-mono text-[10px] mt-1 uppercase tracking-tighter">
-                {currentAge.toFixed(2)} 歲 | {time === 'day' ? '晝' : '夜'}
+          {/* HUD (狀態天碑) - 響應式 */}
+          <header className="absolute top-0 left-0 w-full p-3 sm:p-6 flex justify-between z-30 pointer-events-none">
+            <div className="bg-black/30 p-2 sm:p-3 rounded-xl sm:rounded-2xl backdrop-blur-md border border-white/5 shadow-xl pointer-events-auto">
+              <h1 className="text-base sm:text-2xl font-bold tracking-widest text-white">{stats.name}</h1>
+              <p className="text-amber-500 font-mono text-[8px] sm:text-[10px] mt-0.5 sm:mt-1 uppercase tracking-tighter">
+                {currentAge.toFixed(2)} 歲 | {isNight ? '夜' : '晝'}
               </p>
             </div>
-            <div className="text-right space-y-2 pointer-events-auto">
-              <div className="bg-black/30 px-3 py-1 rounded-full border border-white/5 flex items-center gap-2 text-blue-400 backdrop-blur-sm">
-                <Zap size={12} /> <span className="text-[10px] font-bold">{Math.floor(stats.stamina)}% (x{recoveryRate.toFixed(1)})</span>
+            <div className="text-right space-y-1 sm:space-y-2 pointer-events-auto">
+              <div className="bg-black/30 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border border-white/5 flex items-center gap-1 sm:gap-2 text-blue-400 backdrop-blur-sm">
+                <Zap size={10} className="sm:w-[12px]" /> <span className="text-[8px] sm:text-[10px] font-bold">{Math.floor(stats.stamina)}% (x{recoveryRate.toFixed(1)})</span>
               </div>
-              <div className="bg-black/30 px-3 py-1 rounded-full border border-white/5 flex items-center justify-end gap-2 text-amber-400 font-mono text-[10px] backdrop-blur-sm">
-                <Coins size={12} /> <span>{stats.money}</span>
+              <div className="bg-black/30 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border border-white/5 flex items-center justify-end gap-1 sm:gap-2 text-amber-400 font-mono text-[8px] sm:text-[10px] backdrop-blur-sm">
+                <Coins size={10} className="sm:w-[12px]" /> <span>{stats.money}</span>
               </div>
             </div>
           </header>
 
           {/* 中央敘事展示區 */}
-          <div className="absolute inset-0 flex items-center justify-center px-8 z-20 pointer-events-none">
+          <div className="absolute inset-0 flex items-center justify-center px-4 sm:px-8 z-20 pointer-events-none">
             <AnimatePresence mode="wait">
               <motion.div key={activeIdx} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }}
-                className="bg-black/40 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/10 shadow-2xl w-full max-w-[300px] text-center pointer-events-auto"
+                className="bg-black/40 backdrop-blur-xl p-4 sm:p-8 rounded-2xl sm:rounded-[2.5rem] border border-white/10 shadow-2xl w-full max-w-[260px] sm:max-w-[300px] text-center pointer-events-auto"
               >
-                {/* 分頁內容邏輯 */}
                 {DESK_ITEMS[activeIdx].id === 'scroll' && (
-                  <div className="space-y-4">
-                    <h2 className="text-blue-400 text-[10px] tracking-[0.5em] uppercase">凡塵歷練</h2>
-                    <p className="text-stone-300 text-sm leading-relaxed">碼頭挑夫：+20銀<br/>藥鋪搗藥：+15銀</p>
+                  <div className="space-y-2 sm:space-y-4">
+                    <h2 className="text-blue-400 text-[8px] sm:text-[10px] tracking-[0.5em] uppercase">凡塵歷練</h2>
+                    <p className="text-stone-300 text-xs sm:text-sm leading-relaxed">碼頭挑夫：+20銀<br/>藥鋪搗藥：+15銀</p>
                   </div>
                 )}
                 {DESK_ITEMS[activeIdx].id === 'compass' && (
-                  <div className="space-y-4">
-                    <h2 className="text-cyan-400 text-[10px] tracking-[0.5em] uppercase">司南感應</h2>
-                    <p className="font-bold text-stone-100">青雲鎮 - 西郊</p>
-                    <button className="mt-4 px-6 py-2 bg-cyan-900/30 border border-cyan-500/50 text-cyan-300 text-[10px] rounded-full mx-auto flex items-center gap-2 active:bg-cyan-900/50 transition-all">
-                      出外探查 <ChevronRight size={12}/>
+                  <div className="space-y-2 sm:space-y-4">
+                    <h2 className="text-cyan-400 text-[8px] sm:text-[10px] tracking-[0.5em] uppercase">司南感應</h2>
+                    <p className="font-bold text-stone-100 text-sm">青雲鎮 - 西郊</p>
+                    <button className="mt-2 sm:mt-4 px-4 sm:px-6 py-1.5 sm:py-2 bg-cyan-900/30 border border-cyan-500/50 text-cyan-300 text-[8px] sm:text-[10px] rounded-full mx-auto flex items-center gap-2 active:bg-cyan-900/50 transition-all">
+                      出外探查 <ChevronRight size={10} className="sm:w-[12px]"/>
                     </button>
                   </div>
                 )}
                 {DESK_ITEMS[activeIdx].id === 'manual' && (
-                  <div className="space-y-4">
-                    <h2 className="text-emerald-400 text-[10px] tracking-[0.5em] uppercase">功法修煉</h2>
-                    <p className="text-stone-300 text-sm">體魄: {stats.physique} | 真氣: {stats.qi}</p>
+                  <div className="space-y-2 sm:space-y-4">
+                    <h2 className="text-emerald-400 text-[8px] sm:text-[10px] tracking-[0.5em] uppercase">功法修煉</h2>
+                    <p className="text-stone-300 text-xs sm:text-sm">體魄: {stats.physique} | 真氣: {stats.qi}</p>
                   </div>
                 )}
                 {DESK_ITEMS[activeIdx].id === 'market' && (
-                  <div className="space-y-4">
-                    <h2 className="text-amber-400 text-[10px] tracking-[0.5em] uppercase">資產清算</h2>
-                    <p className="text-stone-300 text-sm">世襲加成：+{nextGenBonus} pt</p>
+                  <div className="space-y-2 sm:space-y-4">
+                    <h2 className="text-amber-400 text-[8px] sm:text-[10px] tracking-[0.5em] uppercase">資產清算</h2>
+                    <p className="text-stone-300 text-xs sm:text-sm">世襲加成：+{nextGenBonus} pt</p>
                   </div>
                 )}
                 {DESK_ITEMS[activeIdx].id === 'bag' && (
-                  <div className="space-y-4">
-                    <h2 className="text-stone-400 text-[10px] tracking-[0.5em] uppercase">存身小物</h2>
-                    <p className="text-stone-300 text-sm">靈米：{stats.inventory.rice} 斗</p>
+                  <div className="space-y-2 sm:space-y-4">
+                    <h2 className="text-stone-400 text-[8px] sm:text-[10px] tracking-[0.5em] uppercase">存身小物</h2>
+                    <p className="text-stone-300 text-xs sm:text-sm">靈米：{stats.inventory.rice} 斗</p>
                   </div>
                 )}
               </motion.div>
@@ -222,18 +258,21 @@ function App() {
           </div>
         </div>
 
-        {/* --- 下方 25%：案几互動區 (物件吸附與大尺寸) --- */}
-        <div className="relative w-full h-[25%] z-10 bg-stone-900 overflow-visible">
+        {/* --- 下方 25%：案几互動區 --- */}
+        <div className="relative w-full h-[25%] min-h-[140px] sm:min-h-0 z-10 bg-stone-900 overflow-visible">
           <img src={`${assetPath}/desk.png`} className="absolute inset-0 w-full h-full object-cover object-top opacity-70" alt="desk" />
           <div className="absolute inset-0 z-15 pointer-events-none opacity-30 mix-blend-multiply animate-sway" style={{ backgroundImage: `url('/assets/leaf-shadows.png')`, backgroundSize: 'cover' }} />
 
           <div className="relative h-full w-full flex items-center justify-center z-20 overflow-visible">
             <motion.div
-              drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.6}
+              drag="x" 
+              dragConstraints={{ left: 0, right: 0 }} 
+              dragElastic={0.5}
               onDragEnd={(e, { offset, velocity }) => {
+                const swipeThreshold = containerWidth * 0.15;
                 const swipe = offset.x + velocity.x * 0.2;
-                if (swipe < -35 && activeIdx < DESK_ITEMS.length - 1) setActiveIdx(activeIdx + 1);
-                if (swipe > 35 && activeIdx > 0) setActiveIdx(activeIdx - 1);
+                if (swipe < -swipeThreshold && activeIdx < DESK_ITEMS.length - 1) setActiveIdx(activeIdx + 1);
+                if (swipe > swipeThreshold && activeIdx > 0) setActiveIdx(activeIdx - 1);
               }}
               className="relative flex items-center justify-center w-full h-full cursor-grab active:cursor-grabbing"
             >
@@ -241,18 +280,29 @@ function App() {
                 <motion.div
                   key={item.id}
                   animate={{ 
-                    x: (i - activeIdx) * 110, // 距離拉近吸附
-                    opacity: 1, 
-                    filter: i === activeIdx ? 'brightness(1.2) drop-shadow(0 0 15px rgba(255,255,255,0.2))' : 'brightness(0.5)' 
+                    x: (i - activeIdx) * cardGap,
+                    opacity: Math.max(0.3, 1 - Math.abs(i - activeIdx) * 0.4),
+                    scale: i === activeIdx ? 1 : 0.85,
+                    filter: i === activeIdx ? 'brightness(1.2) drop-shadow(0 0 15px rgba(255,255,255,0.2))' : 'brightness(0.5)'
                   }}
-                  transition={{ type: 'spring', stiffness: 250, damping: 30 }}
-                  className="absolute flex-shrink-0"
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                  className="absolute flex-shrink-0 slide-transition"
                 >
-                  <div className="relative w-44 flex items-center justify-center aspect-square" style={{ transform: 'translateY(-40%)' }}>
+                  <div 
+                    className="relative flex items-center justify-center aspect-square"
+                    style={{ 
+                      width: i === activeIdx ? '11rem' : '9rem',
+                      transform: 'translateY(-40%)'
+                    }}
+                  >
                     {i === activeIdx && (
-                      <div className={`absolute -inset-8 bg-gradient-to-t ${item.color} to-transparent blur-3xl opacity-20 rounded-full z-0`} />
+                      <div className={`absolute -inset-6 sm:-inset-8 bg-gradient-to-t ${item.color} to-transparent blur-2xl sm:blur-3xl opacity-20 rounded-full z-0`} />
                     )}
-                    <img src={`${assetPath}/${item.asset}`} className="w-full h-full object-contain drop-shadow-[0_20px_30px_rgba(0,0,0,0.8)] relative z-10" alt={item.label} />
+                    <img 
+                      src={`${assetPath}/${item.asset}`} 
+                      className="w-full h-full object-contain drop-shadow-[0_20px_30px_rgba(0,0,0,0.8)] relative z-10" 
+                      alt={item.label} 
+                    />
                   </div>
                 </motion.div>
               ))}
@@ -262,10 +312,10 @@ function App() {
 
         {/* 轉生層 (大限已至) */}
         {view === 'rebirth' && (
-          <div className="absolute inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-12 text-center backdrop-blur-xl">
-            <h2 className="text-3xl font-bold text-amber-600 mb-6 tracking-[0.2em]">壽終正寢</h2>
-            <p className="text-stone-500 text-sm mb-12">一世凡塵終須盡，洗髓池中待重生。</p>
-            <button onClick={handleRebirth} className="w-full py-4 bg-amber-900/40 border border-amber-600/30 text-amber-500 rounded-2xl font-bold shadow-lg active:scale-95 transition-all">
+          <div className="absolute inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-8 sm:p-12 text-center backdrop-blur-xl">
+            <h2 className="text-2xl sm:text-3xl font-bold text-amber-600 mb-4 sm:mb-6 tracking-[0.2em]">壽終正寢</h2>
+            <p className="text-stone-500 text-xs sm:text-sm mb-8 sm:mb-12">一世凡塵終須盡，洗髓池中待重生。</p>
+            <button onClick={handleRebirth} className="w-full py-3 sm:py-4 bg-amber-900/40 border border-amber-600/30 text-amber-500 rounded-2xl font-bold shadow-lg active:scale-95 transition-all">
               洗髓轉生
             </button>
           </div>
