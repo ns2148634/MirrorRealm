@@ -14,6 +14,27 @@ const NAV_ITEMS = [
 
 function App() {
   const [activeIdx, setActiveIdx] = useState(0);
+  const [scale, setScale] = useState(1);
+  const canvasRef = useRef(null);
+  
+  // 計算縮放比例
+  useEffect(() => {
+    const CANVAS_WIDTH = 450;
+    const CANVAS_HEIGHT = 975;
+    
+    const updateScale = () => {
+      const scaleX = window.innerWidth / CANVAS_WIDTH;
+      const scaleY = window.innerHeight / CANVAS_HEIGHT;
+      setScale(Math.min(scaleX, scaleY));
+    };
+    
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    window.addEventListener('orientationchange', () => setTimeout(updateScale, 100));
+    return () => {
+      window.removeEventListener('resize', updateScale);
+    };
+  }, []);
   const [stats, setStats] = useState({
     name: '創辦人',
     age: 16,
@@ -66,7 +87,6 @@ function App() {
         .ink-appear { animation: inkEmerging 1s ease-out forwards; }
         .glow-cyan { filter: drop-shadow(0 0 15px rgba(34, 211, 238, 0.8)); }
         
-        /* 始終縮放以適應螢幕 */
         .game-canvas {
           width: 450px;
           height: 975px;
@@ -74,17 +94,21 @@ function App() {
           background: #1c1917;
           overflow: hidden;
           box-shadow: 0 0 50px rgba(0,0,0,0.5);
-          transform-origin: center;
-          transform: scale(min(100vw / 450, 100vh / 975));
+          transform-origin: center center;
         }
-      `}
         
-        /* 確保外層不 overflow */
-        body, html { overflow: hidden; max-width: 100vw; max-height: 100vh; }
+        body, html { 
+          overflow: hidden; 
+          margin: 0; 
+          padding: 0; 
+          width: 100%; 
+          height: 100%; 
+          position: fixed;
+        }
       `}</style>
 
       {/* 固定尺寸的遊戲畫布 */}
-      <div className="game-canvas">
+      <div className="game-canvas" ref={canvasRef} style={{ transform: `scale(${scale})` }}>
         
         {/* 1. 全屏掛軸底圖 */}
         <div className="absolute inset-0 z-0">
