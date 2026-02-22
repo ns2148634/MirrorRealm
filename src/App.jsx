@@ -66,7 +66,7 @@ function App() {
         .ink-appear { animation: inkEmerging 1s ease-out forwards; }
         .glow-cyan { filter: drop-shadow(0 0 15px rgba(34, 211, 238, 0.8)); }
         
-        /* 鎖定主容器的絕對大小 */
+        /* 始終縮放以適應螢幕 */
         .game-canvas {
           width: 450px;
           height: 975px;
@@ -74,15 +74,10 @@ function App() {
           background: #1c1917;
           overflow: hidden;
           box-shadow: 0 0 50px rgba(0,0,0,0.5);
+          transform-origin: center;
+          transform: scale(min(100vw / 450, 100vh / 975));
         }
-
-        /* 讓容器在小螢幕上縮放，但內容物比例不動 */
-        @media (max-height: 975px), (max-width: 450px) {
-          .game-canvas {
-            transform: scale(calc(min(100vw / 450, 100vh / 975)));
-            transform-origin: center;
-          }
-        }
+      `}
         
         /* 確保外層不 overflow */
         body, html { overflow: hidden; max-width: 100vw; max-height: 100vh; }
