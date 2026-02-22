@@ -67,12 +67,21 @@ function App() {
         .glow-cyan { filter: drop-shadow(0 0 15px rgba(34, 211, 238, 0.8)); }
         
         .game-canvas {
-          width: min(450px, 100vw);
-          height: min(975px, 100vh);
+          width: 450px;
+          height: 975px;
           position: relative;
           background: #1c1917;
           overflow: hidden;
           box-shadow: 0 0 50px rgba(0,0,0,0.5);
+          /* 行動裝置：用 scale，電腦：保持原大小 */
+          transform: scale(calc(min(100vw, 100vh) / 500));
+          transform-origin: center center;
+        }
+        
+        @media (min-width: 500px) {
+          .game-canvas {
+            transform: scale(1);
+          }
         }
         
         body, html { 
