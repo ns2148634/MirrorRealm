@@ -14,6 +14,21 @@ const NAV_ITEMS = [
 
 function App() {
   const [activeIdx, setActiveIdx] = useState(0);
+  const [scale, setScale] = useState(1);
+  
+  useEffect(() => {
+    const updateScale = () => {
+      const scaleX = window.innerWidth / 450;
+      const scaleY = window.innerHeight / 975;
+      const newScale = Math.min(scaleX, scaleY, 1); // 不超過 1
+      setScale(newScale);
+    };
+    
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
+  
   const [stats, setStats] = useState({
     name: '創辦人',
     age: 16,
@@ -73,15 +88,6 @@ function App() {
           background: #1c1917;
           overflow: hidden;
           box-shadow: 0 0 50px rgba(0,0,0,0.5);
-          /* 行動裝置：用 scale，電腦：保持原大小 */
-          transform: scale(calc(min(100vw, 100vh) / 500));
-          transform-origin: center center;
-        }
-        
-        @media (min-width: 500px) {
-          .game-canvas {
-            transform: scale(1);
-          }
         }
         
         body, html { 
@@ -95,7 +101,7 @@ function App() {
       `}</style>
 
       {/* 遊戲畫布 */}
-      <div className="game-canvas">
+      <div className="game-canvas" style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
         
         {/* 1. 全屏掛軸底圖 */}
         <div className="absolute inset-0 z-0">
