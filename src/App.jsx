@@ -67,15 +67,12 @@ function App() {
         .glow-cyan { filter: drop-shadow(0 0 15px rgba(34, 211, 238, 0.8)); }
         
         .game-canvas {
-          width: 450px;
-          height: 975px;
+          width: min(450px, 100vw);
+          height: min(975px, 100vh);
           position: relative;
           background: #1c1917;
           overflow: hidden;
           box-shadow: 0 0 50px rgba(0,0,0,0.5);
-          /* 自動縮放：螢幕小時縮小，螢幕大時保持原大小 */
-          transform: scale(min(1, calc(100vw / 450), calc(100vh / 975)));
-          transform-origin: center center;
         }
         
         body, html { 
