@@ -14,27 +14,6 @@ const NAV_ITEMS = [
 
 function App() {
   const [activeIdx, setActiveIdx] = useState(0);
-  const [scale, setScale] = useState(1);
-  const canvasRef = useRef(null);
-  
-  // 計算縮放比例
-  useEffect(() => {
-    const CANVAS_WIDTH = 450;
-    const CANVAS_HEIGHT = 975;
-    
-    const updateScale = () => {
-      const scaleX = window.innerWidth / CANVAS_WIDTH;
-      const scaleY = window.innerHeight / CANVAS_HEIGHT;
-      setScale(Math.min(scaleX, scaleY));
-    };
-    
-    updateScale();
-    window.addEventListener('resize', updateScale);
-    window.addEventListener('orientationchange', () => setTimeout(updateScale, 100));
-    return () => {
-      window.removeEventListener('resize', updateScale);
-    };
-  }, []);
   const [stats, setStats] = useState({
     name: '創辦人',
     age: 16,
@@ -94,6 +73,8 @@ function App() {
           background: #1c1917;
           overflow: hidden;
           box-shadow: 0 0 50px rgba(0,0,0,0.5);
+          /* 自動縮放：螢幕小時縮小，螢幕大時保持原大小 */
+          transform: scale(min(1, calc(100vw / 450), calc(100vh / 975)));
           transform-origin: center center;
         }
         
@@ -103,12 +84,12 @@ function App() {
           padding: 0; 
           width: 100%; 
           height: 100%; 
-          position: fixed;
+          background: #000;
         }
       `}</style>
 
-      {/* 固定尺寸的遊戲畫布 */}
-      <div className="game-canvas" ref={canvasRef} style={{ transform: `scale(${scale})` }}>
+      {/* 遊戲畫布 */}
+      <div className="game-canvas">
         
         {/* 1. 全屏掛軸底圖 */}
         <div className="absolute inset-0 z-0">
