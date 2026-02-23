@@ -93,7 +93,7 @@ function App() {
              <span className="text-[52px] font-bold text-stone-800 font-sans tracking-tighter opacity-90">16/76</span>
           </div>
           
-          <div className="flex gap-12 mt-1 ml-1">
+          <div className="flex gap-12 mt-5 ml-1">
             <div className="flex items-center gap-2">
               <img src={`${ASSET_PATH}/ui_flame.webp`} className="w-8 h-8 object-contain" alt="hp" />
               <span className="text-[28px] font-bold text-stone-800">80/100</span>
@@ -134,7 +134,16 @@ function App() {
         </div>
 
         {/* 5. 前景茶几 */}
-        <div className="absolute bottom-0 w-full h-[180px] z-20 pointer-events-none">
+        <div 
+          className="absolute bottom-0 w-full h-[180px] z-20 pointer-events-none shadow-[0_-25px_50px_-15px_rgba(0,0,0,0.7)]"
+        >
+          {/* 解析 shadow-[0_-25px_50px_-15px_rgba(0,0,0,0.7)]：
+              - 0: 水平不位移
+              - -25px: 垂直向上位移 25px (關鍵)
+              - 50px: 模糊半徑 (陰影柔和度)
+              - -15px: 擴展半徑 (負值讓陰影稍微內縮，不會太擴散到兩側)
+              - rgba(0,0,0,0.7): 70% 透明度的黑色
+          */}
           <img src={`${ASSET_PATH}/bg_desk.webp`} className="w-full h-full object-cover object-top" alt="desk" />
         </div>
 
