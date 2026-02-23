@@ -75,7 +75,7 @@ function App() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black flex justify-center items-center overflow-hidden font-serif select-none text-stone-200 max-w-full max-h-full">
+    <div className="fixed inset-0 bg-black flex justify-center items-center overflow-hidden font-serif select-none text-stone-200" style={{ width: '100vw', height: '100dvh' }}>
       <style>{`
         @keyframes inkEmerging { from { opacity: 0; filter: blur(10px); } to { opacity: 1; filter: blur(0); } }
         .ink-appear { animation: inkEmerging 1s ease-out forwards; }
@@ -104,8 +104,9 @@ function App() {
         }
       `}</style>
 
-      {/* 遊戲畫布 */}
-      <div className="game-canvas" style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
+      {/* 遊戲畫布容器 - 限制範圍防止溢出 */}
+      <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+        <div className="game-canvas" style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
         
         {/* 1. 全屏掛軸底圖 */}
         <div className="absolute inset-0 z-0">
@@ -215,6 +216,7 @@ function App() {
           </motion.div>
         </div>
 
+      </div>
       </div>
     </div>
   );
