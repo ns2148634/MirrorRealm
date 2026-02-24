@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const ASSET_PATH = '/assets/mortal';
 
-// 確保導航名稱正確
+// 導航項目與資源對應
 const NAV_ITEMS = [
   { id: 'status', label: '本命', asset: 'nav_status.webp' },
   { id: 'map', label: '尋緣', asset: 'nav_map.webp' },
@@ -15,38 +15,29 @@ const NAV_ITEMS = [
 
 function App() {
   const [activeIdx, setActiveIdx] = useState(1); // 預設為尋緣
-  const [scale, setScale] = useState(1);
-  
-  // 比例縮放邏輯：確保 450x975 的畫布與底圖能適配不同螢幕
-  useEffect(() => {
-    const updateScale = () => {
-      const scaleX = window.innerWidth / 450;
-      const scaleY = window.innerHeight / 975;
-      const newScale = Math.min(scaleX, scaleY, 1); 
-      setScale(newScale);
-    };
-    updateScale();
-    window.addEventListener('resize', updateScale);
-    return () => window.removeEventListener('resize', updateScale);
-  }, []);
   
   const [stats] = useState({
-    name: '創辦人', // 對應紅印上的姓名
+    name: '創辦人',
     age: 16,
     maxAge: 76,
     stamina: 80,
     energy: 80,
+    physique: 20.5, // 體魄
   });
 
+  // 根據當前導航顯示內容
   const centerContent = useMemo(() => {
     const item = NAV_ITEMS[activeIdx];
     switch (item.id) {
-      case 'map': return `北方300公尺發現靈脈現象`;
-      default: return `【${item.label}】 內容建設中...`;
+      case 'status': 
+        return `【本命神識】\n名諱：${stats.name}\n骨齡：${stats.age} 載\n\n體魄：${stats.physique}%\n真氣：0%\n穢氣：0%`;
+      case 'map': 
+        return `北方300公尺發現靈脈現象\n(偵測到 2 名道友神識在附近)`;
+      default: 
+        return `【${item.label}】 內容建設中...\n此區域高度會隨內容自動撐開。`;
     }
-  }, [activeIdx]);
+  }, [activeIdx, stats]);
 
-  // 導航邏輯：處理環形偏移
   const getOffsetIndex = (i) => {
     const len = NAV_ITEMS.length;
     let diff = i - activeIdx;
@@ -61,153 +52,154 @@ function App() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black flex justify-center items-center overflow-hidden font-serif select-none" style={{ width: '100vw', height: '100dvh' }}>
+    /* 1. 全局背景層：負責無限平鋪綠色花紋 */
+    <div 
+      className="fixed inset-0 flex justify-center items-center font-serif select-none overflow-hidden" 
+      style={{ 
+        width: '100vw', 
+        height: '100dvh',
+        backgroundImage: `url(${ASSET_PATH}/bg_pattern_tile.webp)`,
+        backgroundRepeat: 'repeat',
+        backgroundSize: '256px auto' 
+      }}
+    >
       <style>{`
         @font-face {
           font-family: 'Kaiti';
           src: local('Kaiti TC'), local('STKaiti'), local('KaiTi');
         }
         .font-kaiti { font-family: 'Kaiti', serif; }
-        .game-canvas {
-          width: 450px;
-          height: 975px;
-          position: relative;
-          background: #1c1917;
-          overflow: hidden;
-        }
         .glow-cyan { filter: drop-shadow(0 0 15px rgba(34, 211, 238, 0.8)); }
+        
+        /* 增加邊緣陰影讓中柱更立體，區隔桌機背景 */
+        .game-pillar-shadow {
+          box-shadow: 0 0 80px rgba(0,0,0,0.6);
+        }
       `}</style>
 
-      <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <div className="game-canvas" style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
+      {/* 2. 中柱容器 (Game Pillar)：鎖定最大寬度 500px，防止桌機災難 */}
+      <div className="relative w-full max-w-[500px] h-full flex flex-col game-pillar-shadow overflow-hidden bg-transparent">
         
-        {/* 1. 背景掛軸：使用 object-fill 確保底圖完美適配 450x975 畫布 */}
-        <div className="absolute inset-0 z-0">
-          <img src={`${ASSET_PATH}/bg_scroll.webp`} className="w-full h-full object-fill" alt="scroll" />
-        </div>
-
-        {/* 2. 上方狀態列：往上調整位置 */}
-        <div className="absolute top-[15px] inset-x-0 z-20 px-[50px]">
+        {/* ================= 上方狀態列 (三段式之頂) ================= */}
+        <div className="flex-shrink-0 w-full px-8 pt-10 pb-4 z-20 relative">
           <div className="flex justify-between items-baseline w-full">
-             <span className="text-[56px] font-bold text-stone-900 font-kaiti leading-none">凡人期</span>
-             <span className="text-[52px] font-bold text-stone-800 font-sans tracking-tighter opacity-90">16/76</span>
+             <span style={{ fontSize: 'clamp(42px, 8vw, 56px)' }} className="font-bold text-stone-900 font-kaiti leading-none">凡人期</span>
+             <span style={{ fontSize: 'clamp(36px, 7vw, 52px)' }} className="font-bold text-stone-800 font-sans tracking-tighter opacity-90">
+               {stats.age}/{stats.maxAge}
+             </span>
           </div>
           
-          <div className="flex gap-12 mt-5 ml-1">
+          <div className="flex gap-10 mt-5 ml-1">
             <div className="flex items-center gap-2">
-              <img src={`${ASSET_PATH}/ui_flame.webp`} className="w-8 h-8 object-contain" alt="hp" />
-              <span className="text-[28px] font-bold text-stone-800">80/100</span>
+              <img src={`${ASSET_PATH}/ui_flame.webp`} className="w-8 h-8 object-contain" alt="stamina" />
+              <span className="text-[26px] font-bold text-stone-800">{stats.stamina}/100</span>
             </div>
             <div className="flex items-center gap-2">
-              <img src={`${ASSET_PATH}/ui_cloud.webp`} className="w-8 h-8 object-contain" alt="mp" />
-              <span className="text-[28px] font-bold text-stone-800">80/100</span>
+              <img src={`${ASSET_PATH}/ui_cloud.webp`} className="w-8 h-8 object-contain" alt="energy" />
+              <span className="text-[26px] font-bold text-stone-800">{stats.energy}/100</span>
             </div>
           </div>
         </div>
 
-        {/* 3. 掛軸內容區域 */}
-        <div className="absolute top-[160px] inset-x-0 bottom-[280px] z-10 px-[60px] flex flex-col">
-          <div className="mt-6 flex-1">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeIdx}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.4 }}
-                className="text-stone-800 font-kaiti"
-              >
-                <p className="text-[28px] leading-[1.8] tracking-widest">
-                  {centerContent}
-                </p>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          {/* 4. 紅印：精確定位於左下角並顯示姓名 */}
-          <div className="absolute bottom-[10px] left-[30px] w-24 h-24 flex items-center justify-center">
-            <img src={`${ASSET_PATH}/ui_seal.webp`} className="absolute inset-0 w-full h-full object-contain opacity-95" alt="seal" />
-            <span className="relative z-12 text-white/90 font-bold text-[18px] font-kaiti mt-1" style={{ writingMode: 'vertical-rl' }}>
-              {stats.name}
-            </span>
-          </div>
-        </div>
-
-        {/* 5. 前景茶几 */}
-        <div 
-          className="absolute bottom-0 w-full h-[180px] z-20 pointer-events-none shadow-[0_-25px_50px_-15px_rgba(0,0,0,0.7)]"
-        >
-          {/* 解析 shadow-[0_-25px_50px_-15px_rgba(0,0,0,0.7)]：
-              - 0: 水平不位移
-              - -25px: 垂直向上位移 25px (關鍵)
-              - 50px: 模糊半徑 (陰影柔和度)
-              - -15px: 擴展半徑 (負值讓陰影稍微內縮，不會太擴散到兩側)
-              - rgba(0,0,0,0.7): 70% 透明度的黑色
-          */}
-          <img src={`${ASSET_PATH}/bg_desk.webp`} className="w-full h-full object-cover object-top" alt="desk" />
-        </div>
-
-        {/* 6. 底部導航：優化「物件首接尾」不飛過去 */}
-        <div className="absolute bottom-0 inset-x-0 h-[280px] z-30 flex items-center justify-center overflow-visible">
-          <motion.div
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.4}
-            onDragEnd={(e, { offset, velocity }) => {
-              const swipeThreshold = 50;
-              if (offset.x < -swipeThreshold || velocity.x < -400) handleNav(1);
-              else if (offset.x > swipeThreshold || velocity.x > 400) handleNav(-1);
+        {/* ================= 中間內容區域 (三段式之身：彈性伸縮紙張) ================= */}
+        <div className="flex-grow w-full relative z-10 flex flex-col items-center overflow-y-auto py-6">
+          <div 
+            className="w-[90%] relative rounded-sm"
+            style={{
+              // [關鍵適配] 米白紙張貼圖平鋪
+              backgroundImage: `url(${ASSET_PATH}/bg_paper_tile.webp)`,
+              backgroundRepeat: 'repeat',
+              minHeight: '60%', 
+              boxShadow: '0 10px 40px -10px rgba(0,0,0,0.4), inset 0 0 30px rgba(0,0,0,0.05)'
             }}
-            className="relative w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
           >
-            {NAV_ITEMS.map((item, i) => {
-              const diff = getOffsetIndex(i);
-              const isActive = diff === 0;
-              // 隱藏遠離中心的物件，防止循環時橫穿畫面
-              const isFar = Math.abs(diff) > 1.5;
-
-              return (
+            <div className="px-10 py-12">
+              <AnimatePresence mode="wait">
                 <motion.div
-                  key={item.id}
-                  animate={{
-                    x: diff * 135,
-                    scale: isActive ? 1.15 : 0.75,
-                    opacity: isFar ? 0 : 1,
-                    zIndex: isActive ? 50 : 10,
-                    y: isActive ? -35 : 20,
-                  }}
-                  transition={{ 
-                    type: 'spring', 
-                    stiffness: 260, 
-                    damping: 30,
-                    opacity: { duration: 0.2 } // 快速淡入淡出，實現「直接接」的效果
-                  }}
-                  className="absolute"
-                  onClick={() => setActiveIdx(i)}
+                  key={activeIdx}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="text-stone-800 font-kaiti"
                 >
-                  <div className="relative flex flex-col items-center">
-                    {/* 選中物件的青光效果 */}
-                    {isActive && (
-                      <div className="absolute -inset-10 bg-cyan-400/20 blur-[45px] rounded-full z-0" />
-                    )}
-                    
-                    <img
-                      src={`${ASSET_PATH}/${item.asset}`}
-                      className={`w-[140px] h-[140px] object-contain transition-all duration-300
-                        ${isActive ? 'glow-cyan brightness-110' : 'brightness-50 grayscale-[15%]'}`}
-                      alt={item.label}
-                    />
-                    
-                    
-                  </div>
+                  <p className="text-[28px] leading-[1.8] tracking-[0.2em] whitespace-pre-wrap">
+                    {centerContent}
+                  </p>
                 </motion.div>
-              );
-            })}
-          </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* 紅印：精確定位於紙張左下角 */}
+            <div className="absolute bottom-10 left-8 w-24 h-24 flex items-center justify-center">
+              <img src={`${ASSET_PATH}/ui_seal.webp`} className="absolute inset-0 w-full h-full object-contain opacity-95" alt="seal" />
+              <span className="relative z-12 text-white/90 font-bold text-[20px] font-kaiti mt-1" style={{ writingMode: 'vertical-rl' }}>
+                {stats.name}
+              </span>
+            </div>
+          </div>
         </div>
 
-      </div>
-      </div>
+        {/* ================= 底部桌案與導航 (三段式之底) ================= */}
+        <div className="flex-shrink-0 w-full h-[280px] relative z-30 mt-[-30px]">
+          {/* 前景茶几：使用陰影壓在紙張上，消除白線 */}
+          <div className="absolute bottom-0 w-full h-[180px] z-10 pointer-events-none">
+            {/* 陰影層：解決銜接白線問題 */}
+            <div className="absolute top-[-20px] left-0 right-0 h-[25px] shadow-[0_-25px_50px_-10px_rgba(0,0,0,0.8)]"></div>
+            <img src={`${ASSET_PATH}/bg_desk.webp`} className="w-full h-full object-cover object-top" alt="desk" />
+          </div>
+
+          {/* 環形導航物件 */}
+          <div className="absolute bottom-0 inset-x-0 h-full z-20 flex items-center justify-center overflow-visible">
+            <motion.div
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.4}
+              onDragEnd={(e, { offset, velocity }) => {
+                const swipeThreshold = 50;
+                if (offset.x < -swipeThreshold || velocity.x < -400) handleNav(1);
+                else if (offset.x > swipeThreshold || velocity.x > 400) handleNav(-1);
+              }}
+              className="relative w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing pt-12"
+            >
+              {NAV_ITEMS.map((item, i) => {
+                const diff = getOffsetIndex(i);
+                const isActive = diff === 0;
+                const isFar = Math.abs(diff) > 1.5;
+
+                return (
+                  <motion.div
+                    key={item.id}
+                    animate={{
+                      x: diff * 135,
+                      scale: isActive ? 1.2 : 0.75,
+                      opacity: isFar ? 0 : 1,
+                      zIndex: isActive ? 50 : 10,
+                      y: isActive ? -45 : 15,
+                    }}
+                    transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+                    className="absolute"
+                    onClick={() => setActiveIdx(i)}
+                  >
+                    <div className="relative flex flex-col items-center">
+                      {isActive && (
+                        <div className="absolute -inset-10 bg-cyan-400/25 blur-[50px] rounded-full z-0" />
+                      )}
+                      <img
+                        src={`${ASSET_PATH}/${item.asset}`}
+                        className={`w-[145px] h-[145px] object-contain transition-all duration-300
+                          ${isActive ? 'glow-cyan brightness-110' : 'brightness-50 grayscale-[20%]'}`}
+                        alt={item.label}
+                      />
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </div>
+        </div>
+
+      </div> {/* 結束中柱容器 */}
     </div>
   );
 }
