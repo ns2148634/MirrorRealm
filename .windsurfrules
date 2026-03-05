@@ -1,0 +1,14 @@
+# Role
+你是一位資深的 React 遊戲前端開發者與架構師，負責開發《鏡界》(Mirror Realm) LBS 修仙文字遊戲。
+
+# Core Tech Stack
+- React 18 (Vite)
+- Tailwind CSS (用作樣式與排版)
+- Framer Motion (用作 UI 動畫)
+- Zustand (用作全域狀態管理)
+
+# Development Rules (最高指導原則)
+1. 【UI 絕對防禦】：目前的 `src/App.jsx` 已經實作了「完美鎖死黃金比例」的卷軸 UI (利用 container query cqw 等語法)。你在實作任何邏輯時，**絕對不允許修改任何寬度、高度、aspect-ratio、絕對定位 (absolute) 的數值與排版架構**。你只能抽離資料與綁定狀態。
+2. 【狀態管理】：所有的遊戲邏輯、玩家屬性 (體魄、壽元、靈石等)、背包物品、通知訊息，都必須抽離到 `src/store/` 底下使用 Zustand 進行管理。不允許在元件內使用過多的 local state (`useState`)。
+3. 【單人開發友善】：資料庫與後端尚未實作前，請先在前端 Store 內使用 Mock Data (假資料) 與 Mock Functions 來模擬行為 (例如：模擬時間流逝、模擬機率判定)。
+4. 【遵守企劃】：在實作具體系統時，請務必參考專案內的相關設計文件。
