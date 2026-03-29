@@ -6,8 +6,8 @@ import useGameStore from './store/gameStore';
 // ⚠️ 注意：如果你的檔案位置不同，請調整引入路徑
 import LoginStage from './components/LoginStage'; // 或 './views/LoginStage'
 import NamingStage from './components/NamingStage'; // 或 './views/NamingStage'
-import PlayingStage from './views/PlayingStage'; // 👈 確保路徑指向你最新的 PlayingStage
-
+// ✅ 正確的空間座標：
+import PlayingStage from './components/PlayingStage';
 export default function App() {
   // 從 Zustand store 獲取資料
   const gameStage = useGameStore((state) => state.gameStage);
