@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 1. 將整個網頁的預設字體改為「思源宋體」，營造古籍排版感 */
+body {
+  font-family: 'Noto Serif TC', serif;
+  letter-spacing: 0.1em; /* 讓所有字體微幅拉寬，更有古風感 */
+}
+
+/* 2. 定義毛筆書法字體，給境界、符文專用 */
+.font-calligraphy {
+  font-family: 'Ma Shan Zheng', cursive;
+}
