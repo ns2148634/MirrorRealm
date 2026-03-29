@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import useGameStore from '../store/gameStore';
 import ExploreView from '../views/ExploreView';
 import StatusView from '../views/StatusView';
+import CultivateView from '../views/CultivateView';
+import RealmBackground from '../components/RealmBackground';
+import BagView from '../views/BagView';
 
 export default function PlayingStage() {
   const [currentMode, setCurrentMode] = useState('status');
@@ -22,7 +25,7 @@ export default function PlayingStage() {
 
   return (
     <div className="flex flex-col h-full w-full bg-[#0F1115] text-white absolute inset-0 font-serif overflow-hidden select-none">
-
+<RealmBackground />
       {/* =========================================
           1. 上方資訊欄：動態氣旋槽 + 自訂圖示 (防跑版設計)
           ========================================= */}
@@ -114,12 +117,17 @@ export default function PlayingStage() {
           ========================================= */}
       <div className="flex-grow relative z-10 overflow-hidden">
         {currentMode === 'status' && <StatusView />}
+        {/* 👇 新增這行：當模式為 cultivate 時，渲染剛做好的戰鬥配置介面 */}
+        {currentMode === 'cultivate' && <CultivateView />}
         {currentMode === 'explore' && <ExploreView />}
-        {['cultivate', 'bag', 'network'].includes(currentMode) && (
-          <div className="h-full flex items-center justify-center text-[clamp(16px,5cqw,24px)] tracking-[8px] text-gray-600 animate-pulse">
-            [ 靈氣匯聚中 ]
-          </div>
-        )}
+        {currentMode === 'bag' && <BagView />}
+        
+        {/* 把 cultivate 從這個陣列中拿掉，只留下還沒做的背包與仙網 */}
+        {currentMode === 'network' && (
+  <div className="h-full flex items-center justify-center text-[clamp(16px,5cqw,24px)] tracking-[8px] text-gray-600 animate-pulse">
+    [ 仙網連線中 ]
+  </div>
+)}
       </div>
 
       {/* =========================================
