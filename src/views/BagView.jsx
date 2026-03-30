@@ -2,15 +2,15 @@
 import React, { useState } from 'react';
 
 // ==========================================
-// 模擬：芥子空間資料庫
+// 模擬：芥子空間資料庫 (🌟 陣法升級：加入絕對座標與浮動延遲)
 // ==========================================
 const TABS = [
-  { id: 'material', label: '素材', color: '#E2E8F0', glow: 'rgba(226,232,240,0.5)' },
-  { id: 'artifact', label: '法器', color: '#00E5FF', glow: 'rgba(0,229,255,0.5)' },
-  { id: 'pill', label: '丹藥', color: '#32D74B', glow: 'rgba(50,215,75,0.5)' },
-  { id: 'talisman', label: '符籙', color: '#9B5CFF', glow: 'rgba(155,92,255,0.5)' },
-  { id: 'puppet', label: '傀儡', color: '#FF3B30', glow: 'rgba(255,59,48,0.5)' },
-  { id: 'pet', label: '靈獸', color: '#FFD700', glow: 'rgba(255,215,0,0.5)' },
+  { id: 'material', label: '素材', color: '#E2E8F0', pos: { top: '22%', left: '25%' }, delay: '0s' },
+  { id: 'artifact', label: '法器', color: '#00E5FF', pos: { top: '15%', left: '75%' }, delay: '1.2s' },
+  { id: 'pill', label: '丹藥', color: '#32D74B', pos: { top: '50%', left: '18%' }, delay: '2.5s' },
+  { id: 'talisman', label: '符籙', color: '#9B5CFF', pos: { top: '45%', left: '82%' }, delay: '0.8s' },
+  { id: 'puppet', label: '傀儡', color: '#FF3B30', pos: { top: '78%', left: '30%' }, delay: '3.1s' },
+  { id: 'pet', label: '靈獸', color: '#FFD700', pos: { top: '72%', left: '72%' }, delay: '1.7s' },
 ];
 
 const RARITY_COLORS = {
@@ -94,7 +94,6 @@ export default function BagView() {
 
   const currentItems = MOCK_INVENTORY[activeTab] || [];
   
-  // 🌟 陣法微調 1：格子數量從 20 增加為 24 (4列 x 6行)
   const TOTAL_SLOTS = 24; 
   const displayGrid = Array.from({ length: TOTAL_SLOTS }).map((_, index) => currentItems[index] || null);
 
@@ -109,9 +108,9 @@ export default function BagView() {
       <style>{`
         @keyframes gentle-float {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-12px); }
+          50% { transform: translateY(-15px); }
         }
-        .animate-float { animation: gentle-float 4s ease-in-out infinite; }
+        .animate-float { animation: gentle-float 5s ease-in-out infinite; }
 
         @keyframes zoom-out-fade {
           from { transform: scale(1); opacity: 1; }
@@ -139,40 +138,53 @@ export default function BagView() {
       `}</style>
 
       {/* =========================================
-          L1 視圖：芥子總覽 (六大分類懸浮)
+          L1 視圖：芥子總覽 (散落星圖顯化)
           ========================================= */}
       {showL1 && (
         <div 
-          className={`absolute inset-0 flex flex-col items-center justify-center px-[8cqw] pt-[10cqw] z-20
+          className={`absolute inset-0 flex flex-col items-center justify-center px-[4cqw] pt-[5cqw] z-20
             ${viewState === 'overview' ? 'opacity-100' : ''}
             ${viewState === 'entering' ? 'animate-zoom-out-fade pointer-events-none' : ''} 
             ${viewState === 'exiting' ? 'animate-shrink-in-fade pointer-events-none' : ''}
           `}
         >
-          <div className="grid grid-cols-2 gap-[6cqw] w-full max-w-[400px]">
-            {TABS.map((tab, i) => (
+          {/* 🌟 星圖容器：設定相對高度，讓內部的絕對座標生效 */}
+          <div className="relative w-full h-[65vh] max-w-[400px] mx-auto">
+            {TABS.map((tab) => (
+              
+              // 外層負責絕對定位 (定死座標)
               <div 
                 key={tab.id}
-                onClick={() => viewState === 'overview' && handleEnterCategory(tab.id)}
-                className={`cursor-pointer group ${viewState === 'overview' ? 'animate-float' : ''}`}
-                style={viewState === 'overview' ? { animationDelay: `${(i * 0.5) % 2}s` } : {}}
+                className="absolute z-10"
+                style={{ 
+                  top: tab.pos.top, 
+                  left: tab.pos.left, 
+                  transform: 'translate(-50%, -50%)' // 確保座標對齊圖騰中心
+                }}
               >
+                {/* 內層負責互動與漂浮動畫 */}
                 <div 
-                  className="aspect-square rounded-full flex flex-col items-center justify-center border border-white/10 bg-black/40 backdrop-blur-md transition-all duration-500 group-hover:scale-105 group-hover:bg-white/5 group-active:scale-95"
-                  style={{ boxShadow: `inset 0 0 20px rgba(255,255,255,0.02), 0 0 15px ${tab.glow}` }}
+                  onClick={() => viewState === 'overview' && handleEnterCategory(tab.id)}
+                  className={`relative flex items-center justify-center cursor-pointer group active:scale-95 transition-all duration-300 ${viewState === 'overview' ? 'animate-float' : ''}`}
+                  style={{ animationDelay: tab.delay }}
                 >
-                  <span 
-                    className="text-[clamp(18px,5cqw,24px)] font-bold tracking-widest drop-shadow-[0_0_8px_currentColor]"
-                    style={{ color: tab.color }}
-                  >
-                    {tab.label}
-                  </span>
-                  <span className="text-[10px] text-gray-500 mt-2 tracking-widest">
-                    {MOCK_INVENTORY[tab.id]?.length || 0} 種類
-                  </span>
+                  <div className="w-[18cqw] h-[18cqw] max-w-[80px] max-h-[80px] flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
+                    <img 
+                      src={`/images/icons/icon_${tab.id}.svg`} 
+                      alt={tab.label}
+                      className="w-full h-full object-contain opacity-90"
+                      style={{ filter: `drop-shadow(0 0 15px ${tab.color})` }}
+                    />
+                  </div>
                 </div>
               </div>
+
             ))}
+          </div>
+          
+          {/* 點綴：底部微弱的神識提示 */}
+          <div className="absolute bottom-[calc(env(safe-area-inset-bottom,20px)+10cqw)] text-[#00E5FF] tracking-[0.5em] text-[12px] opacity-40 pointer-events-none">
+            探入神識以檢視
           </div>
         </div>
       )}
@@ -231,7 +243,6 @@ export default function BagView() {
             </div>
           </div>
 
-          {/* 🌟 陣法微調 2：L2 底部返回區域 (統一底座架構，移除 safe-area 計算) */}
           <div className="w-full shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col pt-[8cqw]">
             <div className="px-[6cqw] pb-[6cqw] flex justify-between items-center w-full max-w-[500px] mx-auto">
               <button 
@@ -259,9 +270,7 @@ export default function BagView() {
             ${viewState === 'exiting-item' ? 'animate-shrink-out-fade pointer-events-none' : ''}
           `}
         >
-          {/* 🌟 陣法微調 3：中央物品大圖與資訊 (最大化空間，拔除頂部額外按鈕) */}
           <div className="flex-grow flex flex-col items-center justify-center px-[8cqw]">
-            {/* 懸浮法球 (大圖示) */}
             <div 
               className={`relative w-[35cqw] h-[35cqw] rounded-full flex items-center justify-center mb-[8cqw] ${viewState === 'item-detail' ? 'animate-float' : ''}`}
               style={{
@@ -276,13 +285,11 @@ export default function BagView() {
               >
                 {selectedItem.name.charAt(0)}
               </span>
-              {/* 數量 */}
               <div className="absolute -bottom-2 px-3 py-1 text-[12px] font-mono text-white tracking-widest bg-black/80 border border-white/20 rounded-full shadow-[0_0_10px_rgba(0,0,0,0.8)]">
                 數量: {selectedItem.count}
               </div>
             </div>
 
-            {/* 物品名稱 */}
             <h3 
               className="text-[clamp(24px,7cqw,32px)] font-bold tracking-[0.3em] mb-4 drop-shadow-md text-center"
               style={{ color: RARITY_COLORS[selectedItem.rarity].border }}
@@ -290,16 +297,13 @@ export default function BagView() {
               {selectedItem.name}
             </h3>
 
-            {/* 物品描述 */}
             <p className="text-gray-300 text-[clamp(14px,4cqw,16px)] tracking-wider leading-relaxed text-center px-[4cqw] bg-black/30 border border-white/5 p-4 rounded-xl backdrop-blur-md">
               {selectedItem.desc || '一件散發著微弱靈氣的修仙物品。'}
             </p>
           </div>
 
-          {/* 🌟 陣法微調 4：L3 底部區域 (與 L2 完全對齊的底座) */}
           <div className="w-full shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col pt-[8cqw]">
             
-            {/* 動作按鈕：合成 / 銷毀 */}
             <div className="px-[5cqw] flex gap-[4cqw] pb-[4cqw] w-full max-w-[500px] mx-auto">
               <button
                 onClick={() => handleAction('銷毀')}
@@ -315,7 +319,6 @@ export default function BagView() {
               </button>
             </div>
 
-            {/* 返回鍵 (精準對齊 L2 的座標與高度) */}
             <div className="px-[6cqw] pb-[6cqw] flex justify-between items-center w-full max-w-[500px] mx-auto">
               <button 
                 onClick={() => viewState === 'item-detail' && handleReturnDetail()}

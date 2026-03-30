@@ -41,26 +41,22 @@ export default function CultivateView() {
   const auraColor = isMale ? '#00E5FF' : '#9B5CFF'; 
   const meditatorImg = player?.gender === 'female' ? 'meditator_female.svg' : 'meditator_male.svg';
 
-  // 空間穿梭狀態機
   const [viewState, setViewState] = useState('array'); 
   const [activeCategory, setActiveCategory] = useState(null); 
 
-  // 裝備狀態
   const [methods, setMethods] = useState({ main: null, sub1: null, sub2: null });
   const [gear, setGear] = useState({
-    talisman: {},    // { id: count } 多選與數量
-    artifact: [],    // [item1, item2] 多選
-    formation: null, // 單選
-    puppet: null,    // 單選
-    pet: null        // 單選
+    talisman: {},    
+    artifact: [],    
+    formation: null, 
+    puppet: null,    
+    pet: null        
   });
   
   const [isModified, setIsModified] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // =========================================
   // 神識計算邏輯
-  // =========================================
   const maxGodSense = 50; 
   let currentLoad = 0;
   Object.entries(gear.talisman).forEach(([id, count]) => {
@@ -74,9 +70,7 @@ export default function CultivateView() {
 
   const isOverloaded = currentLoad > maxGodSense;
 
-  // =========================================
   // 互動處理邏輯 
-  // =========================================
   const handleOpenLibrary = (category) => {
     if (navigator.vibrate) navigator.vibrate([20, 30]);
     setActiveCategory(category);
@@ -93,7 +87,6 @@ export default function CultivateView() {
     }, 400);
   };
 
-  // 處理單選裝備
   const handleEquipSingle = (item) => {
     if (navigator.vibrate) navigator.vibrate(15);
     setIsModified(true);
@@ -106,7 +99,6 @@ export default function CultivateView() {
     }
   };
 
-  // 處理法器多選
   const toggleArtifact = (item) => {
     if (navigator.vibrate) navigator.vibrate(10);
     setIsModified(true);
@@ -117,7 +109,6 @@ export default function CultivateView() {
     });
   };
 
-  // 處理符籙數量增減
   const updateTalismanCount = (item, delta) => {
     if (navigator.vibrate) navigator.vibrate(5);
     setIsModified(true);
@@ -183,7 +174,7 @@ export default function CultivateView() {
       `}</style>
 
       {/* =========================================
-          L1 視圖：識海大陣
+          L1 視圖：識海大陣 (單屏無滾動)
           ========================================= */}
       {showArray && (
         <div 
@@ -193,8 +184,8 @@ export default function CultivateView() {
             ${viewState === 'exiting-library' ? 'animate-shrink-in-fade pointer-events-none' : ''}
           `}
         >
-          {/* 頂部操作 */}
-          <div className="pt-[2cqw] px-[6cqw] shrink-0 flex justify-between items-center mb-[2cqw]">
+          {/* 🌟 1. 頂部操作 (固定) */}
+          <div className="pt-[2vh] px-[6cqw] shrink-0 flex justify-between items-center mb-[2vh]">
             <h2 className="text-[clamp(20px,6cqw,28px)] tracking-[0.4em] drop-shadow-[0_0_8px_currentColor]" style={{ color: auraColor }}>
               造化識海
             </h2>
@@ -212,10 +203,11 @@ export default function CultivateView() {
             </button>
           </div>
 
-          <div className="flex-grow overflow-y-auto no-scrollbar flex flex-col px-[5cqw] pb-[calc(env(safe-area-inset-bottom,20px)+5cqw)]">
+          {/* 🌟 主視圖容器：鎖死滾動，依賴 flex 彈性壓縮 */}
+          <div className="flex-1 flex flex-col px-[5cqw] pb-[calc(env(safe-area-inset-bottom,20px)+2vh)] overflow-hidden">
             
-            {/* 🌟 1. 丹田氣旋 (人像與陣眼) */}
-            <div className="relative w-full max-w-[280px] mx-auto aspect-[4/5] flex items-center justify-center mb-[6cqw] shrink-0">
+            {/* 🌟 2. 丹田氣旋 (人像與陣眼) - 使用 max-h 避免在小螢幕過大 */}
+            <div className="relative w-full max-w-[260px] mx-auto aspect-[4/5] max-h-[42vh] flex items-center justify-center shrink mb-[2vh]">
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
                  <div className="w-[80%] h-[80%] rounded-full animate-pulse opacity-20 blur-[40px]" style={{ backgroundColor: auraColor }}></div>
               </div>
@@ -228,7 +220,6 @@ export default function CultivateView() {
                 </div>
               </div>
               
-              {/* 三大陣眼 */}
               <div className="absolute z-20 w-[35%] aspect-square bottom-[5%] left-1/2 -translate-x-1/2 animate-float" style={{ animationDelay: '0s' }}>
                 <EnergyNode item={methods.main} title="主修 (丹田)" defaultColor="#FFD700" onClick={() => handleOpenLibrary('main')} onRemove={(e) => { e.stopPropagation(); handleEquipSingle(null); }} />
               </div>
@@ -240,10 +231,9 @@ export default function CultivateView() {
               </div>
             </div>
 
-            {/* 🌟 2. 五道法寶懸浮區 (符、器、寵、陣、傀儡) */}
-            <div className="flex flex-col gap-[8cqw] w-full max-w-[320px] mx-auto mb-auto shrink-0 z-10">
+            {/* 🌟 3. 五道法寶懸浮區 (縮小間距) */}
+            <div className="flex flex-col gap-[3vh] w-full max-w-[300px] mx-auto shrink-0 z-10">
               
-              {/* 第一排：符籙、法器 */}
               <div className="flex justify-around items-center px-[4cqw]">
                 <FloatingIcon 
                   type="talisman" title="符籙" 
@@ -261,7 +251,6 @@ export default function CultivateView() {
                 />
               </div>
 
-              {/* 第二排：靈寵、陣法、傀儡 */}
               <div className="flex justify-between items-center px-[2cqw]">
                 <FloatingIcon 
                   type="pet" title="靈寵" 
@@ -282,12 +271,11 @@ export default function CultivateView() {
                   onClick={() => handleOpenLibrary('puppet')} 
                 />
               </div>
-
             </div>
 
-            {/* 🌟 3. 神識負載條 (壓在最底部) */}
-            <div className="w-full max-w-[400px] mx-auto shrink-0 mt-[10cqw]">
-              <div className="text-center text-[clamp(14px,4cqw,16px)] text-white tracking-[0.5em] drop-shadow-md mb-3">神識負載</div>
+            {/* 🌟 4. 神識負載條 (使用 mt-auto 強制推到底部) */}
+            <div className="w-full max-w-[400px] mx-auto shrink-0 mt-auto pt-[2vh]">
+              <div className="text-center text-[clamp(14px,4cqw,16px)] text-white tracking-[0.5em] drop-shadow-md mb-2">神識負載</div>
               <div className="flex justify-between items-end mb-1">
                 <span className="text-[10px] text-[#FFD700] tracking-widest opacity-80">當前佔用</span>
                 <span className={`font-mono text-[14px] ${isOverloaded ? 'text-[#FF3B30] animate-pulse drop-shadow-[0_0_5px_#FF3B30]' : 'text-[#FFD700]'}`}>
@@ -347,7 +335,7 @@ export default function CultivateView() {
                     onClick={() => {
                       if (isTalisman) return; 
                       if (isArtifact) toggleArtifact(item);
-                      else handleEquipSingle(isEquipped ? null : item); // 點擊已裝備的則卸下
+                      else handleEquipSingle(isEquipped ? null : item); 
                     }}
                     className={`relative flex flex-col p-[4cqw] rounded-xl border backdrop-blur-sm transition-all animate-float
                       ${isEquipped ? `bg-[${auraColor}]/10 border-[${auraColor}]/50 shadow-[0_0_15px_${auraColor}30]` : 'bg-[#1A1F2E]/80 border-white/10 hover:bg-white/5'}
@@ -405,74 +393,35 @@ export default function CultivateView() {
 }
 
 // =========================================
-// 共用元件：浮動法寶圖騰 (根據截圖手繪 SVG)
+// 共用元件：浮動法寶圖騰 (讀取自製圖檔版)
 // ==========================================
 function FloatingIcon({ type, title, isActive, count, color, delay, onClick }) {
-  // 動態調整外觀
-  const renderIcon = () => {
-    const iconClass = `w-full h-full transition-all duration-500 ${isActive ? 'drop-shadow-[0_0_10px_currentColor]' : 'opacity-40'}`;
-    const fill = "currentColor";
-
-    switch(type) {
-      case 'talisman': // 符籙 (兩張符紙交疊)
-        return (
-          <svg viewBox="0 0 24 24" className={iconClass} style={{ color }}>
-            <path d="M6 8L16 5.5L18.5 16.5L8.5 19Z" fill="none" stroke={fill} strokeWidth="1.5" />
-            <path d="M4 11L14 9.5L15.5 18.5L5.5 20Z" fill={fill} opacity="0.8" />
-          </svg>
-        );
-      case 'artifact': // 法器 (一柄飛劍)
-        return (
-          <svg viewBox="0 0 24 24" className={iconClass} style={{ color, transform: 'rotate(45deg)' }}>
-            <path d="M11 2L13 2L13 14L11 14Z" fill={fill} />
-            <path d="M8 14L16 14L16 16L8 16Z" fill={fill} />
-            <path d="M11 16L13 16L13 22L11 22Z" fill={fill} />
-            <circle cx="12" cy="15" r="1.5" fill="#1A1F2E" />
-          </svg>
-        );
-      case 'pet': // 靈寵 (獸印/爪印)
-        return (
-          <svg viewBox="0 0 24 24" className={iconClass} style={{ color }}>
-            <circle cx="12" cy="15" r="4.5" fill={fill} />
-            <circle cx="6.5" cy="10" r="2.5" fill={fill} />
-            <circle cx="12" cy="6" r="3" fill={fill} />
-            <circle cx="17.5" cy="10" r="2.5" fill={fill} />
-          </svg>
-        );
-      case 'formation': // 陣法 (陣旗)
-        return (
-          <svg viewBox="0 0 24 24" className={iconClass} style={{ color }}>
-            <path d="M7 2L7 22" stroke={fill} strokeWidth="2" strokeLinecap="round"/>
-            <path d="M7 4L19 7L13 10L19 13L7 16" fill={fill} opacity="0.9" />
-          </svg>
-        );
-      case 'puppet': // 傀儡 (機關人)
-        return (
-          <svg viewBox="0 0 24 24" className={iconClass} style={{ color }}>
-            <rect x="10" y="3" width="4" height="4" rx="1" fill={fill} />
-            <path d="M7 9H17V14H15V21H13V15H11V21H9V14H7V9Z" fill={fill} />
-            <path d="M5 9H7V13H5V9Z" fill={fill} />
-            <path d="M17 9H19V13H17V9Z" fill={fill} />
-          </svg>
-        );
-      default: return null;
-    }
-  };
-
+  const imgSrc = `/images/icons/icon_${type}.svg`; 
+  
   return (
     <div 
       onClick={onClick}
       className="relative flex flex-col items-center justify-center cursor-pointer group animate-float"
       style={{ animationDelay: delay }}
     >
-      <div className="w-[12cqw] h-[12cqw] flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-active:scale-95">
-        {renderIcon()}
+      <div 
+        className={`w-[10cqw] h-[10cqw] flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-active:scale-95
+          ${isActive ? 'opacity-100' : 'opacity-30'}
+        `}
+      >
+        <img 
+          src={imgSrc} 
+          alt={title}
+          className="w-full h-full object-contain"
+          style={{ filter: isActive ? `drop-shadow(0 0 10px ${color})` : 'none' }}
+        />
       </div>
       
-      {/* 裝備數量或亮點指示器 */}
       {isActive && (
         <div className="absolute -top-1 -right-2 bg-black/80 px-1.5 py-0.5 rounded-md border border-white/20 shadow-[0_0_5px_rgba(0,0,0,0.8)]">
-          <span className="text-[10px] font-mono font-bold" style={{ color }}>{count > 0 ? `x${count}` : '✓'}</span>
+          <span className="text-[10px] font-mono font-bold" style={{ color }}>
+            {count > 0 ? `x${count}` : '✓'}
+          </span>
         </div>
       )}
     </div>
@@ -480,7 +429,7 @@ function FloatingIcon({ type, title, isActive, count, color, delay, onClick }) {
 }
 
 // =========================================
-// 共用元件：陣眼節點 (保持不變)
+// 共用元件：陣眼節點 
 // ==========================================
 function EnergyNode({ item, title, defaultColor, onClick, onRemove }) {
   const isFilled = !!item;
