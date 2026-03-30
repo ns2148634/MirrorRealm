@@ -6,6 +6,7 @@ import StatusView from '../views/StatusView';
 import CultivateView from '../views/CultivateView';
 import RealmBackground from '../components/RealmBackground';
 import BagView from '../views/BagView';
+import WorldView from '../views/WorldView'; // 🌟 新增：引入大千世界陣法
 
 export default function PlayingStage() {
   const [currentMode, setCurrentMode] = useState('status');
@@ -76,18 +77,16 @@ export default function PlayingStage() {
       </div>
 
       {/* =========================================
-          2. 中央主顯示區 (🌟 修復：仙網被正確放入這裡)
+          2. 中央主顯示區
           ========================================= */}
       <div className="flex-grow relative z-10 overflow-hidden">
         {currentMode === 'status' && <StatusView />}
         {currentMode === 'cultivate' && <CultivateView />}
         {currentMode === 'explore' && <ExploreView />}
         {currentMode === 'bag' && <BagView />}
-        {currentMode === 'network' && (
-          <div className="h-full flex items-center justify-center text-[clamp(16px,5cqw,24px)] tracking-[8px] text-[#32D74B] opacity-70 animate-pulse shadow-black drop-shadow-lg">
-            [ 仙網連線中 ]
-          </div>
-        )}
+        
+        {/* 🌟 核心替換：將原本的 [仙網連線中] 換成大千世界 (WorldView) */}
+        {currentMode === 'network' && <WorldView />}
       </div>
 
       {/* =========================================
