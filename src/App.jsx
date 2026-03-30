@@ -3,13 +3,11 @@ import React, { useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import useGameStore from './store/gameStore';
 
-// ⚠️ 注意：如果你的檔案位置不同，請調整引入路徑
-import LoginStage from './components/LoginStage'; // 或 './views/LoginStage'
-import NamingStage from './components/NamingStage'; // 或 './views/NamingStage'
-// ✅ 正確的空間座標：
-import PlayingStage from './components/PlayingStage';
+import LoginStage from './components/LoginStage'; 
+import NamingStage from './components/NamingStage'; 
+import PlayingStage from './components/PlayingStage'; 
+
 export default function App() {
-  // 從 Zustand store 獲取資料
   const gameStage = useGameStore((state) => state.gameStage);
   const checkAuthAndPlayer = useGameStore((state) => state.checkAuthAndPlayer);
   const startOnlineRecovery = useGameStore((state) => state.startOnlineRecovery);
@@ -17,12 +15,10 @@ export default function App() {
   const generateInitialTasks = useGameStore((state) => state.generateInitialTasks);
   const fetchPlayerStatus = useGameStore((state) => state.fetchPlayerStatus);
 
-  // 應用啟動時檢查認證狀態
   useEffect(() => {
     checkAuthAndPlayer();
   }, [checkAuthAndPlayer]);
 
-  // 天道時間流逝系統 (保留你原本的完美邏輯)
   useEffect(() => {
     if (gameStage === 'playing') {
       fetchPlayerStatus().then(() => {
@@ -37,39 +33,50 @@ export default function App() {
 
   return (
     <>
-      {/* 🌟 第一道封印：鎮壓瀏覽器預設的物理法則 (寫入全域 CSS) */}
+      {/* =========================================
+          🌟 核心法陣一：全域 CSS 護盾
+          (鎮壓橡皮筋回彈、隱藏醜陋滾動條、保留自訂字型)
+          ========================================= */}
       <style>{`
         html, body, #root {
           width: 100%;
           height: 100%;
           margin: 0;
           padding: 0;
-          overflow: hidden; /* 鎖死最外層，不准出現滾動條 */
-          overscroll-behavior: none; /* 禁用手機的「邊緣回彈」與「下拉重新整理」 */
-          -webkit-user-select: none; /* 徹底禁用 iOS 長按反白文字的行為 */
-          -webkit-touch-callout: none; /* 禁用長按彈出選單 */
+          overflow: hidden; 
+          overscroll-behavior: none; 
+          -webkit-user-select: none; 
+          -webkit-touch-callout: none; 
         }
+        
+        /* 隱藏滾動條，但保留手指/滑鼠滾動功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 保留你原本的修仙字體設定 */
+        @import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap');
+        @font-face { font-family: 'Kaiti'; src: local('Kaiti TC'), local('STKaiti'), local('KaiTi'); }
+        .font-kaiti { font-family: 'Kaiti', serif; }
+        .font-calligraphy { font-family: 'Ma Shan Zheng', cursive; }
       `}</style>
 
-      {/* 🌟 第二道封印：將 w-screen h-screen 改為 fixed inset-0 */}
-      {/* fixed inset-0 會把這個黑底容器死死「釘」在螢幕的四個角落，絕對不會跟著滑動 */}
       <div className="fixed inset-0 bg-black flex items-center justify-center overflow-hidden font-serif select-none">
         
-        {/* 遊戲本體結界 (Mobile Wrapper) */}
-        <div className="w-full h-full max-w-[430px] max-h-[932px] relative bg-[#0F1115] sm:rounded-[2rem] sm:border border-white/10 overflow-hidden shadow-[0_0_50px_rgba(0,229,255,0.05)]">
-          
+        {/* =========================================
+            🌟 核心法陣二：天地結界 (Mobile Wrapper)
+            ========================================= */}
+        <div 
+          className="w-full h-full max-w-[430px] max-h-[932px] relative bg-[#0F1115] sm:rounded-[2rem] sm:border border-white/10 overflow-hidden shadow-[0_0_50px_rgba(0,229,255,0.05)]"
+          // 👇 就是這個陣眼！有了它，裡面的 cqw 單位才會根據這個 430px 的黑框去計算，而不是電腦大螢幕！
+          style={{ containerType: 'inline-size' }} 
+        >
           <AnimatePresence mode="wait">
-            {/* 階段一：登入/註冊畫面 */}
             {gameStage === 'login' && <LoginStage key="login" />}
-
-            {/* 階段二：輸入姓名 (創角) */}
             {gameStage === 'naming' && <NamingStage key="naming" />}
-
-            {/* 階段三：正式遊戲主畫面 */}
             {gameStage === 'playing' && <PlayingStage key="playing" />}
           </AnimatePresence>
-
         </div>
+
       </div>
     </>
   );
