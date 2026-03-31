@@ -35,24 +35,34 @@ const MOCK_INVENTORY = {
   ]
 };
 
+// 初始空裝備配置
+const initialLoadout = {
+  methods: { main: null, sub1: null, sub2: null },
+  gear: { talisman: {}, artifact: [], formation: null, puppet: null, pet: null }
+};
+
 export default function CultivateView() {
   const player = useGameStore((state) => state.player);
   const isMale = player?.gender !== 'female'; 
   const auraColor = isMale ? '#00E5FF' : '#9B5CFF'; 
   const meditatorImg = player?.gender === 'female' ? 'meditator_female.svg' : 'meditator_male.svg';
 
-  const [viewState, setViewState] = useState('array'); 
+  // 空間穿梭狀態機: overview (L1), layout-detail (L2), selecting (L3)
+  const [viewState, setViewState] = useState('overview'); 
   const [activeCategory, setActiveCategory] = useState(null); 
+  const [isBrowsing, setIsBrowsing] = useState(false); // 標記是否為純瀏覽模式
 
-  const [methods, setMethods] = useState({ main: null, sub1: null, sub2: null });
-  const [gear, setGear] = useState({
-    talisman: {},    
-    artifact: [],    
-    formation: null, 
-    puppet: null,    
-    pet: null        
-  });
-  
+  // 🌟 三重部局資料庫
+  const [loadouts, setLoadouts] = useState([
+    JSON.parse(JSON.stringify(initialLoadout)),
+    JSON.parse(JSON.stringify(initialLoadout)),
+    JSON.parse(JSON.stringify(initialLoadout))
+  ]);
+  const [currentLayoutIdx, setCurrentLayoutIdx] = useState(0);
+
+  // 當前編輯中的裝備狀態 (L2)
+  const [methods, setMethods] = useState(initialLoadout.methods);
+  const [gear, setGear] = useState(initialLoadout.gear);
   const [isModified, setIsModified] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -67,39 +77,71 @@ export default function CultivateView() {
   if (gear.formation) currentLoad += gear.formation.cost;
   if (gear.puppet) currentLoad += gear.puppet.cost;
   if (gear.pet) currentLoad += gear.pet.cost;
-
   const isOverloaded = currentLoad > maxGodSense;
 
+  // =========================================
   // 互動處理邏輯 
-  const handleOpenLibrary = (category) => {
+  // =========================================
+  
+  // 進入 L2 (配置特定部局)
+  const handleEnterLayout = (idx) => {
     if (navigator.vibrate) navigator.vibrate([20, 30]);
+    setCurrentLayoutIdx(idx);
+    setMethods(loadouts[idx].methods);
+    setGear(loadouts[idx].gear);
+    setIsModified(false);
+    setViewState('entering-layout');
+    setTimeout(() => setViewState('layout-detail'), 400);
+  };
+
+  // 返回 L1 (總覽)
+  const handleReturnOverview = () => {
+    if (navigator.vibrate) navigator.vibrate(15);
+    setViewState('exiting-layout');
+    setTimeout(() => setViewState('overview'), 400);
+  };
+
+  // 進入 L3 (瀏覽模式 - 從 L1 觸發)
+  const handleBrowseLibrary = (category) => {
+    if (navigator.vibrate) navigator.vibrate(15);
+    setIsBrowsing(true);
     setActiveCategory(category);
     setViewState('entering-library');
     setTimeout(() => setViewState('selecting'), 400);
   };
 
-  const handleReturnArray = () => {
+  // 進入 L3 (裝備模式 - 從 L2 觸發)
+  const handleEquipLibrary = (category) => {
     if (navigator.vibrate) navigator.vibrate(15);
-    setViewState('exiting-library');
-    setTimeout(() => {
-      setViewState('array');
-      setActiveCategory(null);
-    }, 400);
+    setIsBrowsing(false);
+    setActiveCategory(category);
+    setViewState('entering-library');
+    setTimeout(() => setViewState('selecting'), 400);
   };
 
+  // 從 L3 返回
+  const handleReturnLibrary = () => {
+    if (navigator.vibrate) navigator.vibrate(15);
+    setViewState('exiting-library');
+    setTimeout(() => setViewState(isBrowsing ? 'overview' : 'layout-detail'), 400);
+  };
+
+  // 裝備操作邏輯 (僅在 isBrowsing === false 時觸發)
   const handleEquipSingle = (item) => {
+    if (isBrowsing) return;
     if (navigator.vibrate) navigator.vibrate(15);
     setIsModified(true);
     if (['main', 'sub1', 'sub2'].includes(activeCategory)) {
       setMethods(prev => ({ ...prev, [activeCategory]: item }));
-      handleReturnArray();
+      handleReturnLibrary();
     } else {
       setGear(prev => ({ ...prev, [activeCategory]: item }));
-      handleReturnArray();
+      handleReturnLibrary();
     }
   };
 
   const toggleArtifact = (item) => {
+    if (isBrowsing) return;
     if (navigator.vibrate) navigator.vibrate(10);
     setIsModified(true);
     setGear(prev => {
@@ -110,6 +152,7 @@ export default function CultivateView() {
   };
 
   const updateTalismanCount = (item, delta) => {
+    if (isBrowsing) return;
     if (navigator.vibrate) navigator.vibrate(5);
     setIsModified(true);
     setGear(prev => {
@@ -126,6 +169,9 @@ export default function CultivateView() {
     if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
     setIsSaving(true);
     setTimeout(() => {
+      const newLoadouts = [...loadouts];
+      newLoadouts[currentLayoutIdx] = { methods, gear };
+      setLoadouts(newLoadouts);
       setIsSaving(false);
       setIsModified(false);
     }, 800);
@@ -137,8 +183,24 @@ export default function CultivateView() {
     return MOCK_INVENTORY[activeCategory] || [];
   };
 
-  const showArray = ['array', 'entering-library', 'exiting-library'].includes(viewState);
-  const showLibrary = ['selecting', 'entering-library', 'exiting-library'].includes(viewState);
+  // 🌟 動畫判斷法訣
+  const getL1AnimationClass = () => {
+    if (viewState === 'overview') return 'opacity-100';
+    if (viewState === 'entering-layout' || (isBrowsing && viewState === 'entering-library')) return 'animate-zoom-out-fade pointer-events-none';
+    if (viewState === 'exiting-layout' || (isBrowsing && viewState === 'exiting-library')) return 'animate-shrink-in-fade pointer-events-none';
+    return 'opacity-0 pointer-events-none hidden';
+  };
+
+  const getL2AnimationClass = () => {
+    if (viewState === 'layout-detail') return 'opacity-100';
+    if (viewState === 'entering-layout') return 'animate-zoom-in-fade pointer-events-none';
+    if (viewState === 'exiting-layout') return 'animate-shrink-out-fade pointer-events-none';
+    if (!isBrowsing && viewState === 'entering-library') return 'animate-zoom-out-fade pointer-events-none';
+    if (!isBrowsing && viewState === 'exiting-library') return 'animate-shrink-in-fade pointer-events-none';
+    return 'opacity-0 pointer-events-none hidden';
+  };
+
+  const showL3 = ['selecting', 'entering-library', 'exiting-library'].includes(viewState);
 
   return (
     <div className="h-full w-full relative flex flex-col bg-transparent overflow-hidden text-white font-serif z-10 pt-[5cqw]">
@@ -173,108 +235,122 @@ export default function CultivateView() {
         .animate-shrink-in-fade { animation: shrink-in-fade 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
       `}</style>
 
-      {/* =========================================
-          L1 視圖：識海大陣 (單屏無滾動)
-          ========================================= */}
-      {showArray && (
-        <div 
-          className={`absolute inset-0 flex flex-col z-20 
-            ${viewState === 'array' ? 'opacity-100' : ''}
-            ${viewState === 'entering-library' ? 'animate-zoom-out-fade pointer-events-none' : ''} 
-            ${viewState === 'exiting-library' ? 'animate-shrink-in-fade pointer-events-none' : ''}
-          `}
-        >
-          {/* 🌟 1. 頂部操作 (固定) */}
-          <div className="pt-[2vh] px-[6cqw] shrink-0 flex justify-between items-center mb-[2vh]">
-            <h2 className="text-[clamp(20px,6cqw,28px)] tracking-[0.4em] drop-shadow-[0_0_8px_currentColor]" style={{ color: auraColor }}>
-              造化識海
-            </h2>
-            <button 
-              onClick={handleSaveConfiguration}
-              disabled={!isModified || isSaving}
-              className={`px-4 py-1.5 rounded-full text-[12px] tracking-[0.3em] transition-all duration-300 border ${
-                isSaving ? 'bg-white/20 border-white/40 text-white animate-pulse' :
-                isModified && !isOverloaded
-                  ? `bg-[${auraColor}]/20 border-[${auraColor}] text-[${auraColor}] shadow-[0_0_15px_${auraColor}40] active:scale-95` 
-                  : 'bg-black/50 border-white/10 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              {isSaving ? '周天運轉...' : '銘記法陣'}
-            </button>
+      {/* 🌟 頂部操作列 (使用 Absolute 讓 L1/L2 字體原地淡入淡出) */}
+      <div className="pt-[2vh] px-[6cqw] shrink-0 relative flex justify-center items-center mb-[2vh] h-[40px] z-50">
+        <div className={`absolute inset-0 flex justify-center items-center transition-all duration-300 ${getL1AnimationClass()}`}>
+          <h2 className="text-[clamp(20px,6cqw,28px)] tracking-[0.4em] drop-shadow-[0_0_8px_currentColor] font-bold" style={{ color: auraColor }}>造化識海</h2>
+        </div>
+
+        <div className={`absolute inset-0 flex justify-between items-center px-[6cqw] transition-all duration-300 ${getL2AnimationClass()}`}>
+          <button onClick={handleReturnOverview} className="text-gray-400 hover:text-white tracking-widest text-[14px] flex items-center gap-1 active:scale-95 transition-all">
+            <span className="text-lg leading-none mt-[-2px]">‹</span> 收回神識
+          </button>
+          <button 
+            onClick={handleSaveConfiguration} disabled={!isModified || isSaving}
+            className={`px-4 py-1.5 rounded-full text-[12px] tracking-[0.3em] transition-all duration-300 border ${
+              isSaving ? 'bg-white/20 border-white/40 text-white animate-pulse' :
+              isModified && !isOverloaded ? `bg-[${auraColor}]/20 border-[${auraColor}] text-[${auraColor}] shadow-[0_0_15px_${auraColor}40] active:scale-95` 
+                : 'bg-black/50 border-white/10 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            {isSaving ? '周天運轉...' : '銘記法陣'}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col px-[5cqw] pb-[calc(env(safe-area-inset-bottom,20px)+2vh)] overflow-hidden">
+        
+        {/* =========================================
+            🌟 丹田氣旋 (人像固定不動，只有法陣淡入淡出)
+            ========================================= */}
+        <div className="relative w-full max-w-[260px] mx-auto aspect-[4/5] max-h-[42vh] flex items-center justify-center shrink mb-[2vh]">
+          {/* 打坐人像背景 (永遠顯示，不參與動畫) */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+             <div className="w-[80%] h-[80%] rounded-full animate-pulse opacity-20 blur-[40px]" style={{ backgroundColor: auraColor }}></div>
+          </div>
+          <div className="absolute inset-0 border border-white/5 rounded-full animate-[spin_40s_linear_infinite] pointer-events-none flex items-center justify-center z-0">
+            <div className="w-[90%] h-[90%] border-[0.5px] border-dashed border-white/20 rounded-full"></div>
+          </div>
+          <div className="absolute inset-0 flex items-center justify-center opacity-60 pointer-events-none z-10 animate-float">
+            <div className="w-[60%] h-[80%] relative mt-8">
+              <img src={`/images/status/${meditatorImg}`} alt="打坐虛影" className="w-full h-full object-contain" style={{ filter: `drop-shadow(0 0 10px ${auraColor})` }} />
+            </div>
+          </div>
+          
+          {/* L1 陣法 (部局壹、貳、參) */}
+          <div className={`absolute inset-0 z-20 ${getL1AnimationClass()}`}>
+            <div className="absolute w-[35%] aspect-square bottom-[5%] left-1/2 -translate-x-1/2 animate-float" style={{ animationDelay: '0s' }}>
+              <LayoutNode label="壹" color="#FFD700" onClick={() => handleEnterLayout(0)} />
+            </div>
+            <div className="absolute w-[28%] aspect-square top-[20%] left-[-5%] animate-float" style={{ animationDelay: '1s' }}>
+              <LayoutNode label="貳" color="#00E5FF" onClick={() => handleEnterLayout(1)} />
+            </div>
+            <div className="absolute w-[28%] aspect-square top-[20%] right-[-5%] animate-float" style={{ animationDelay: '2s' }}>
+              <LayoutNode label="參" color="#00E5FF" onClick={() => handleEnterLayout(2)} />
+            </div>
           </div>
 
-          {/* 🌟 主視圖容器：鎖死滾動，依賴 flex 彈性壓縮 */}
-          <div className="flex-1 flex flex-col px-[5cqw] pb-[calc(env(safe-area-inset-bottom,20px)+2vh)] overflow-hidden">
-            
-            {/* 🌟 2. 丹田氣旋 (人像與陣眼) - 使用 max-h 避免在小螢幕過大 */}
-            <div className="relative w-full max-w-[260px] mx-auto aspect-[4/5] max-h-[42vh] flex items-center justify-center shrink mb-[2vh]">
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-                 <div className="w-[80%] h-[80%] rounded-full animate-pulse opacity-20 blur-[40px]" style={{ backgroundColor: auraColor }}></div>
-              </div>
-              <div className="absolute inset-0 border border-white/5 rounded-full animate-[spin_40s_linear_infinite] pointer-events-none flex items-center justify-center z-0">
-                <div className="w-[90%] h-[90%] border-[0.5px] border-dashed border-white/20 rounded-full"></div>
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center opacity-60 pointer-events-none z-10 animate-float">
-                <div className="w-[60%] h-[80%] relative mt-8">
-                  <img src={`/images/status/${meditatorImg}`} alt="打坐虛影" className="w-full h-full object-contain" style={{ filter: `drop-shadow(0 0 10px ${auraColor})` }} />
-                </div>
-              </div>
-              
-              <div className="absolute z-20 w-[35%] aspect-square bottom-[5%] left-1/2 -translate-x-1/2 animate-float" style={{ animationDelay: '0s' }}>
-                <EnergyNode item={methods.main} title="主修 (丹田)" defaultColor="#FFD700" onClick={() => handleOpenLibrary('main')} onRemove={(e) => { e.stopPropagation(); handleEquipSingle(null); }} />
-              </div>
-              <div className="absolute z-20 w-[28%] aspect-square top-[20%] left-[-5%] animate-float" style={{ animationDelay: '1s' }}>
-                <EnergyNode item={methods.sub1} title="副修 (左肩)" defaultColor="#00E5FF" onClick={() => handleOpenLibrary('sub1')} onRemove={(e) => { e.stopPropagation(); setActiveCategory('sub1'); handleEquipSingle(null); }} />
-              </div>
-              <div className="absolute z-20 w-[28%] aspect-square top-[20%] right-[-5%] animate-float" style={{ animationDelay: '2s' }}>
-                <EnergyNode item={methods.sub2} title="副修 (右肩)" defaultColor="#00E5FF" onClick={() => handleOpenLibrary('sub2')} onRemove={(e) => { e.stopPropagation(); setActiveCategory('sub2'); handleEquipSingle(null); }} />
-              </div>
+          {/* L2 陣法 (主修、副修) */}
+          <div className={`absolute inset-0 z-20 ${getL2AnimationClass()}`}>
+            <div className="absolute w-[35%] aspect-square bottom-[5%] left-1/2 -translate-x-1/2 animate-float" style={{ animationDelay: '0s' }}>
+              <EnergyNode item={methods.main} title="主修 (丹田)" defaultColor="#FFD700" onClick={() => handleEquipLibrary('main')} onRemove={(e) => { e.stopPropagation(); handleEquipSingle(null); }} />
             </div>
+            <div className="absolute w-[28%] aspect-square top-[20%] left-[-5%] animate-float" style={{ animationDelay: '1s' }}>
+              <EnergyNode item={methods.sub1} title="副修 (左肩)" defaultColor="#00E5FF" onClick={() => handleEquipLibrary('sub1')} onRemove={(e) => { e.stopPropagation(); setActiveCategory('sub1'); handleEquipSingle(null); }} />
+            </div>
+            <div className="absolute w-[28%] aspect-square top-[20%] right-[-5%] animate-float" style={{ animationDelay: '2s' }}>
+              <EnergyNode item={methods.sub2} title="副修 (右肩)" defaultColor="#00E5FF" onClick={() => handleEquipLibrary('sub2')} onRemove={(e) => { e.stopPropagation(); setActiveCategory('sub2'); handleEquipSingle(null); }} />
+            </div>
+          </div>
+        </div>
 
-            {/* 🌟 3. 五道法寶懸浮區 (縮小間距) */}
-            <div className="flex flex-col gap-[3vh] w-full max-w-[300px] mx-auto shrink-0 z-10">
-              
+        {/* =========================================
+            🌟 底部法寶區 (Absolute 切換)
+            ========================================= */}
+        <div className="flex-1 relative w-full max-w-[320px] mx-auto">
+          
+          {/* L1 底部：主副功法與陣法 (純瀏覽) */}
+         {/* L1 底部：主副功法與陣法 (純瀏覽) */}
+<div className={`absolute inset-0 flex flex-col ${getL1AnimationClass()}`}>
+  {/* 🌟 改為相對空間，讓圖騰在內部自由散落 */}
+  <div className="relative w-full flex-grow mt-[2vh]">
+    
+    {/* 主功法 (左上方，最大) */}
+    <div className="absolute top-[5%] left-[16%] scale-[1.5] z-10">
+      <FloatingIcon type="main" title="主功法" isActive={true} hideCount={true} color={auraColor} delay="0s" onClick={() => handleBrowseLibrary('main')} />
+    </div>
+
+    {/* 副功法 (右方偏中，次大) */}
+    <div className="absolute top-[25%] right-[15%] scale-[1.3] z-10">
+      <FloatingIcon type="sub" title="副功法" isActive={true} hideCount={true} color={auraColor} delay="0.8s" onClick={() => handleBrowseLibrary('sub')} />
+    </div>
+
+    {/* 陣法 (左方偏下，次大) */}
+    <div className="absolute bottom-[10%] left-[45%] -translate-x-1/2 scale-[1.4] z-10">
+      <FloatingIcon type="formation" title="陣法" isActive={true} hideCount={true} color={auraColor} delay="1.5s" onClick={() => handleBrowseLibrary('formation')} />
+    </div>
+
+  </div>
+
+  
+</div>
+
+          {/* L2 底部：五大法寶與神識條 (裝備模式) */}
+          <div className={`absolute inset-0 flex flex-col ${getL2AnimationClass()}`}>
+            <div className="flex flex-col gap-[2vh] w-full shrink-0 z-10 mt-[1vh]">
               <div className="flex justify-around items-center px-[4cqw]">
-                <FloatingIcon 
-                  type="talisman" title="符籙" 
-                  isActive={Object.keys(gear.talisman).length > 0} 
-                  count={Object.values(gear.talisman).reduce((a,b)=>a+b,0)}
-                  color={auraColor} delay="0s" 
-                  onClick={() => handleOpenLibrary('talisman')} 
-                />
-                <FloatingIcon 
-                  type="artifact" title="法器" 
-                  isActive={gear.artifact.length > 0} 
-                  count={gear.artifact.length}
-                  color={auraColor} delay="1.5s" 
-                  onClick={() => handleOpenLibrary('artifact')} 
-                />
+                <FloatingIcon type="talisman" title="符籙" isActive={Object.keys(gear.talisman).length > 0} count={Object.values(gear.talisman).reduce((a,b)=>a+b,0)} color={auraColor} delay="0s" onClick={() => handleEquipLibrary('talisman')} />
+                <FloatingIcon type="artifact" title="法器" isActive={gear.artifact.length > 0} count={gear.artifact.length} color={auraColor} delay="1.5s" onClick={() => handleEquipLibrary('artifact')} />
               </div>
-
               <div className="flex justify-between items-center px-[2cqw]">
-                <FloatingIcon 
-                  type="pet" title="靈寵" 
-                  isActive={!!gear.pet} 
-                  color={auraColor} delay="0.5s" 
-                  onClick={() => handleOpenLibrary('pet')} 
-                />
-                <FloatingIcon 
-                  type="formation" title="陣法" 
-                  isActive={!!gear.formation} 
-                  color={auraColor} delay="2s" 
-                  onClick={() => handleOpenLibrary('formation')} 
-                />
-                <FloatingIcon 
-                  type="puppet" title="傀儡" 
-                  isActive={!!gear.puppet} 
-                  color={auraColor} delay="1s" 
-                  onClick={() => handleOpenLibrary('puppet')} 
-                />
+                <FloatingIcon type="pet" title="靈寵" isActive={!!gear.pet} color={auraColor} delay="0.5s" onClick={() => handleEquipLibrary('pet')} />
+                <FloatingIcon type="formation" title="陣法" isActive={!!gear.formation} color={auraColor} delay="2s" onClick={() => handleEquipLibrary('formation')} />
+                <FloatingIcon type="puppet" title="傀儡" isActive={!!gear.puppet} color={auraColor} delay="1s" onClick={() => handleEquipLibrary('puppet')} />
               </div>
             </div>
 
-            {/* 🌟 4. 神識負載條 (使用 mt-auto 強制推到底部) */}
-            <div className="w-full max-w-[400px] mx-auto shrink-0 mt-auto pt-[2vh]">
+            {/* 神識負載條 */}
+            <div className="w-full shrink-0 mt-auto pt-[2vh] pb-[2vh]">
               <div className="text-center text-[clamp(14px,4cqw,16px)] text-white tracking-[0.5em] drop-shadow-md mb-2">神識負載</div>
               <div className="flex justify-between items-end mb-1">
                 <span className="text-[10px] text-[#FFD700] tracking-widest opacity-80">當前佔用</span>
@@ -283,31 +359,26 @@ export default function CultivateView() {
                 </span>
               </div>
               <div className="h-[4px] bg-black/60 rounded-full overflow-hidden border border-white/10">
-                <div 
-                  className={`h-full rounded-full transition-all duration-500 ${isOverloaded ? 'bg-[#FF3B30] shadow-[0_0_10px_#FF3B30]' : 'bg-[#FFD700] shadow-[0_0_8px_#FFD700]'}`}
-                  style={{ width: `${Math.min(100, (currentLoad / maxGodSense) * 100)}%` }}
-                ></div>
+                <div className={`h-full rounded-full transition-all duration-500 ${isOverloaded ? 'bg-[#FF3B30] shadow-[0_0_10px_#FF3B30]' : 'bg-[#FFD700] shadow-[0_0_8px_#FFD700]'}`} style={{ width: `${Math.min(100, (currentLoad / maxGodSense) * 100)}%` }}></div>
               </div>
             </div>
-
           </div>
+
         </div>
-      )}
+      </div>
 
       {/* =========================================
-          L2 視圖：藏經閣/萬寶閣 (挑選裝備)
+          L3 視圖：藏經閣/萬寶閣 (清單列表)
           ========================================= */}
-      {showLibrary && (
-        <div 
-          className={`absolute inset-0 flex flex-col z-30 bg-black/80 backdrop-blur-xl
-            ${viewState === 'selecting' ? 'opacity-100' : ''}
-            ${viewState === 'entering-library' ? 'animate-zoom-in-fade pointer-events-none' : ''}
-            ${viewState === 'exiting-library' ? 'animate-shrink-out-fade pointer-events-none' : ''}
-          `}
-        >
+      {showL3 && (
+        <div className={`absolute inset-0 flex flex-col z-50 bg-black/80 backdrop-blur-xl
+          ${viewState === 'selecting' ? 'opacity-100' : ''}
+          ${viewState === 'entering-library' ? 'animate-zoom-in-fade pointer-events-none' : ''}
+          ${viewState === 'exiting-library' ? 'animate-shrink-out-fade pointer-events-none' : ''}
+        `}>
           <div className="pt-[10cqw] px-[6cqw] shrink-0 flex flex-col mb-[4cqw]">
             <h3 className="text-[clamp(18px,5cqw,24px)] font-bold tracking-[0.4em] text-white mb-4 text-center">
-              神識探查
+              {isBrowsing ? '藏經閣' : '神識探查'}
             </h3>
           </div>
 
@@ -320,26 +391,26 @@ export default function CultivateView() {
                 const isArtifact = activeCategory === 'artifact';
                 const tCount = isTalisman ? (gear.talisman[item.id] || 0) : 0;
                 const isEquippedArtifact = isArtifact && gear.artifact.find(a => a.id === item.id);
-                // 判斷單選是否裝備
+                
                 let isSingleEquipped = false;
                 if (!isTalisman && !isArtifact) {
                   if (['main', 'sub1', 'sub2'].includes(activeCategory)) isSingleEquipped = methods[activeCategory]?.id === item.id;
                   else isSingleEquipped = gear[activeCategory]?.id === item.id;
                 }
-                
                 const isEquipped = isTalisman ? (tCount > 0) : (isArtifact ? isEquippedArtifact : isSingleEquipped);
                 
                 return (
                   <div 
                     key={item.id}
                     onClick={() => {
+                      if (isBrowsing) return; // 瀏覽模式不可裝備
                       if (isTalisman) return; 
                       if (isArtifact) toggleArtifact(item);
                       else handleEquipSingle(isEquipped ? null : item); 
                     }}
                     className={`relative flex flex-col p-[4cqw] rounded-xl border backdrop-blur-sm transition-all animate-float
-                      ${isEquipped ? `bg-[${auraColor}]/10 border-[${auraColor}]/50 shadow-[0_0_15px_${auraColor}30]` : 'bg-[#1A1F2E]/80 border-white/10 hover:bg-white/5'}
-                      ${!isTalisman && 'cursor-pointer active:scale-95'}
+                      ${isEquipped && !isBrowsing ? `bg-[${auraColor}]/10 border-[${auraColor}]/50 shadow-[0_0_15px_${auraColor}30]` : 'bg-[#1A1F2E]/80 border-white/10 hover:bg-white/5'}
+                      ${(!isBrowsing && !isTalisman) ? 'cursor-pointer active:scale-95' : ''}
                     `}
                     style={{ animationDelay: `${(i * 0.1) % 1}s` }}
                   >
@@ -350,22 +421,18 @@ export default function CultivateView() {
                       <div className="flex gap-2 items-center">
                         {item.cost > 0 && <span className="text-[10px] text-[#FFD700] font-mono bg-[#FFD700]/10 px-1.5 py-0.5 rounded border border-[#FFD700]/20">負載 {item.cost}</span>}
                         
-                        {/* 符籙數量增減 */}
-                        {isTalisman && (
+                        {!isBrowsing && isTalisman && (
                           <div className="flex items-center gap-3 bg-black/60 rounded-lg px-2 py-1 border border-white/10 ml-2">
                             <button onClick={(e) => { e.stopPropagation(); updateTalismanCount(item, -1); }} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white bg-white/5 rounded">-</button>
                             <span className={`font-mono text-[14px] w-4 text-center ${tCount > 0 ? `text-[${auraColor}]` : 'text-gray-500'}`}>{tCount}</span>
                             <button onClick={(e) => { e.stopPropagation(); updateTalismanCount(item, 1); }} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white bg-white/5 rounded">+</button>
                           </div>
                         )}
-
-                        {/* 裝備標籤 */}
-                        {!isTalisman && isEquipped && (
+                        {!isBrowsing && !isTalisman && isEquipped && (
                           <span className="text-sm ml-2 font-bold" style={{ color: auraColor }}>已刻印</span>
                         )}
                       </div>
                     </div>
-                    
                     <p className="text-[clamp(12px,3.5cqw,14px)] text-gray-400 leading-relaxed tracking-wider bg-black/30 p-2 rounded-lg border border-white/5">
                       {item.desc}
                     </p>
@@ -378,7 +445,7 @@ export default function CultivateView() {
           <div className="w-full shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col pt-[8cqw]">
             <div className="px-[6cqw] pb-[6cqw] flex justify-between items-center w-full max-w-[500px] mx-auto">
               <button 
-                onClick={handleReturnArray}
+                onClick={handleReturnLibrary}
                 className="text-gray-400 hover:text-white tracking-widest text-[clamp(14px,4cqw,16px)] flex items-center gap-2 border border-white/10 bg-black/40 px-4 py-1.5 rounded-full active:scale-95 transition-all"
               >
                 <span className="text-lg leading-none mt-[-2px]">‹</span> 收回神識
@@ -393,9 +460,26 @@ export default function CultivateView() {
 }
 
 // =========================================
-// 共用元件：浮動法寶圖騰 (讀取自製圖檔版)
+// 共用元件：新版部局節點 (純文字)
 // ==========================================
-function FloatingIcon({ type, title, isActive, count, color, delay, onClick }) {
+function LayoutNode({ label, title, color, onClick }) {
+  return (
+    <div className="relative w-full h-full group" onClick={onClick}>
+      <div
+        className="w-full h-full rounded-full flex flex-col items-center justify-center cursor-pointer transition-all duration-500 bg-black/40 backdrop-blur-sm border border-white/10 hover:bg-white/5"
+        style={{ boxShadow: `0 0 20px ${color}30, inset 0 0 15px ${color}20` }}
+      >
+        <span className="text-[clamp(20px,6cqw,28px)] font-bold drop-shadow-[0_0_8px_currentColor]" style={{ color }}>{label}</span>
+        <span className="absolute -bottom-6 text-[10px] text-gray-400 tracking-widest whitespace-nowrap drop-shadow-md">{title}</span>
+      </div>
+    </div>
+  );
+}
+
+// =========================================
+// 共用元件：浮動法寶圖騰
+// ==========================================
+function FloatingIcon({ type, title, isActive, hideCount, count, color, delay, onClick }) {
   const imgSrc = `/images/icons/icon_${type}.svg`; 
   
   return (
@@ -417,19 +501,24 @@ function FloatingIcon({ type, title, isActive, count, color, delay, onClick }) {
         />
       </div>
       
-      {isActive && (
+      {!hideCount && isActive && (
         <div className="absolute -top-1 -right-2 bg-black/80 px-1.5 py-0.5 rounded-md border border-white/20 shadow-[0_0_5px_rgba(0,0,0,0.8)]">
           <span className="text-[10px] font-mono font-bold" style={{ color }}>
             {count > 0 ? `x${count}` : '✓'}
           </span>
         </div>
       )}
+
+      {/* 瀏覽模式下，顯示文字標籤 */}
+      {hideCount && (
+        <span className="absolute -bottom-5 text-[10px] text-gray-400 tracking-widest">{title}</span>
+      )}
     </div>
   );
 }
 
 // =========================================
-// 共用元件：陣眼節點 
+// 共用元件：陣眼節點 (L2)
 // ==========================================
 function EnergyNode({ item, title, defaultColor, onClick, onRemove }) {
   const isFilled = !!item;
