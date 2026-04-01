@@ -4,37 +4,50 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // 加入這個 server 區塊，解決前後端 Port 不同的問題
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000', // 指向你的 Node.js 後端
+        changeOrigin: true,
+      }
+    }
+  },
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['icon-192.png', 'icon-512.png'],
       manifest: {
-        name: '鏡界-凡人篇',
-        short_name: '鏡界',
-        description: '文字修仙 LBS 遊戲',
-        theme_color: '#0c0a09', // stone-950 背景色
-        background_color: '#0c0a09',
-        display: 'standalone', // 這是全螢幕運行的關鍵
+        name:             '鏡界 Mirror Realm',
+        short_name:       '鏡界',
+        description:      '文字修仙 LBS 遊戲',
+        theme_color:      '#0A0C10',
+        background_color: '#0A0C10',
+        display:          'standalone',
+        start_url:        '/',
         icons: [
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+        ],
+      },
+      workbox: {
+        // App Shell：HTML 與 JS/CSS 快取優先
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
+        runtimeCaching: [
           {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
+            // API 請求：網路優先，失敗時回傳快取
+            urlPattern: /^\/api\//,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName:       'api-cache',
+              networkTimeoutSeconds: 5,
+              expiration:      { maxEntries: 50, maxAgeSeconds: 300 },
+            },
           },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable' // 讓圖示在不同手機上能自動適應形狀
-          }
-        ]
-      }
+        ],
+      },
     })
   ]
 })

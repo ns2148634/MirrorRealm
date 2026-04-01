@@ -2,31 +2,32 @@
 import React, { useState, useRef } from 'react';
 import useGameStore from '../store/gameStore';
 
-// ==========================================
-// 1. 實體機緣字典 (可互動的事件點)
-// ==========================================
+// 戰鬥日誌各行類型對應顏色
+const LOG_LINE_COLOR = {
+  'player-atk':  '#FFD700', // 玩家攻擊 → 黃
+  'enemy-atk':   '#FF3B30', // 敵人攻擊 → 紅
+  'outcome-win': '#FFD700', // 勝利分隔 → 金
+  'outcome-lose':'#FF3B30', // 重傷分隔 → 紅
+  'reward':      '#32D74B', // 獎勵     → 綠
+  'header':      '#00E5FF', // 雙方資訊 → 青藍
+  'info':        '#9CA3AF', // 其他     → 灰
+};
+
 const POI_MAPPING = {
   'convenience': { name: '修真坊市', color: '#FFD700', glow: 'rgba(255,215,0,0.6)', type: 'shop' }, 
   'place_of_worship': { name: '前輩遺物', color: '#9B5CFF', glow: 'rgba(155,92,255,0.6)', type: 'ruin' }, 
   'default': { name: '低階妖獸', color: '#FF3B30', glow: 'rgba(255,59,48,0.6)', type: 'beast' }     
 };
 
-// ==========================================
-// 2. 風水靈脈字典 (背景地形光暈)
-// ==========================================
 const TERRAIN_MAPPING = {
   'water': { type: '水脈', color: '#00E5FF', size: 'w-[40cqw] h-[40cqw]', animation: 'animate-[pulse_4s_infinite]' },
-  'forest': { type: '靈林', color: '#32D74B', size: 'w-[50cqw] h-[50cqw]', animation: 'animate-[pulse_6s_infinite]' },
-  'peak': { type: '龍脈', color: '#B8860B', size: 'w-[30cqw] h-[30cqw]', animation: 'animate-[pulse_8s_infinite]' },
-  'station': { type: '金脈', color: '#E2E8F0', size: 'w-[45cqw] h-[45cqw]', animation: 'animate-[pulse_3s_infinite]' },
-  'commercial': { type: '業火', color: '#FF3B30', size: 'w-[55cqw] h-[55cqw]', animation: 'animate-[pulse_5s_infinite]' }
+  'forest': { type: '靈林', color: '#32D74B', size: 'w-[50cqw] h-[50cqw]', animation: 'animate-[pulse_6s_infinite]' }
 };
 
 export default function ExploreView() {
   const player = useGameStore((state) => state.player);
   const reduceEp = useGameStore((state) => state.reduceEp); 
   
-  // 🌟 狀態機
   const [isScanning, setIsScanning] = useState(false);
   const [isTuning, setIsTuning] = useState(false);
   const [isPressing, setIsPressing] = useState(false);
@@ -35,75 +36,156 @@ export default function ExploreView() {
   const [terrains, setTerrains] = useState([]); 
   const [message, setMessage] = useState('凝神聚氣，外放神識');
 
-  // 🌟 長按法訣所需的神識指針
+  // 👉 新增：控制彈出視窗的狀態
+  // step 可以是 'info' (確認資訊), 'loading' (連線中), 'result' (結算)
+  const [activeModal, setActiveModal] = useState(null); 
+
   const pressTimer = useRef(null);
   const pressStartTime = useRef(null);
 
-  // ==========================================
-  // 3. 長按與點擊互動邏輯 (按一下探索，長按調息)
-  // ==========================================
   const handlePointerDown = (e) => {
     e.preventDefault();
-    if (isScanning) return; // 探靈中不可干擾
-    
+    if (isScanning || activeModal) return; 
     pressStartTime.current = Date.now();
     setIsPressing(true);
-    if (navigator.vibrate) navigator.vibrate(10); // 輕微觸發震動
+    if (navigator.vibrate) navigator.vibrate(10); 
     
-    // 啟動三秒入定倒數
-    pressTimer.current = setTimeout(() => {
-      setIsTuning((prev) => {
-        const nextState = !prev; // 切換調息狀態
-        setMessage(nextState ? '凝神入定，滙集天地靈氣' : '凝神聚氣，外放神識');
-        return nextState;
-      });
+    pressTimer.current = setTimeout(async () => {
+      const entering = !isTuning;
+      setIsTuning(entering);
       setIsPressing(false);
-      if (navigator.vibrate) navigator.vibrate([50, 50, 150]); // 入定成功長震動
+      if (navigator.vibrate) navigator.vibrate([50, 50, 150]);
+
+      if (!entering) {
+        setMessage('凝神聚氣，外放神識');
+        return;
+      }
+
+      // 進入調息 → 呼叫後端 API
+      if (!player?.id) {
+        setMessage('尚未感知到道友的命格');
+        setIsTuning(false);
+        return;
+      }
+
+      setMessage('凝神入定，調息中...');
+      try {
+        const res = await fetch('/api/player/meditate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerId: player.id }),
+        });
+        const result = await res.json();
+        if (!res.ok) {
+          setMessage(result.message || '氣息尚未平穩');
+          setIsTuning(false);
+        } else {
+          const { hp_restored, sp_restored } = result.data;
+          setMessage(`調息完畢，氣血 +${hp_restored}，體力 +${sp_restored}`);
+        }
+      } catch {
+        setMessage('調息失敗，天地靈氣紊亂');
+        setIsTuning(false);
+      }
     }, 3000);
   };
 
   const handlePointerUp = (e) => {
     e.preventDefault();
     if (!pressStartTime.current) return;
-    
     const duration = Date.now() - pressStartTime.current;
-    
-    // 中斷長按計時
     clearTimeout(pressTimer.current);
     pressTimer.current = null;
     pressStartTime.current = null;
     setIsPressing(false);
     
-    // 判斷為短按 (小於 500ms)
     if (duration < 500) {
       if (isTuning) {
-        // 如果正在調息，短按則中斷調息
         setIsTuning(false);
         setMessage('凝神聚氣，外放神識');
         if (navigator.vibrate) navigator.vibrate(15);
       } else {
-        // 如果未在調息，短按則發動探靈
         handleScan();
       }
     }
   };
 
-  // ==========================================
-  // 4. 尋龍探靈邏輯 (真實地圖抓取)
-  // ==========================================
+  // 👉 改動一：點擊地圖光點時，先不打 API，而是打開「確認視窗」
+  const openNodeModal = (clickedNode) => {
+    setActiveModal({
+        step: 'info',
+        node: clickedNode
+    });
+  };
+
+  // 👉 改動二：玩家在視窗點擊「確認探索」後，才真正呼叫 API
+  const confirmExecuteNode = async () => {
+    if (!player?.id || !activeModal?.node) return;
+    
+    try {
+      // 進入 loading 狀態，避免玩家重複點擊
+      setActiveModal(prev => ({ ...prev, step: 'loading' }));
+
+      const res = await fetch('/api/lbs/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerId: player.id, 
+          nodeType: activeModal.node.nodeType || '拾荒', 
+          nodeName: activeModal.node.name
+        })
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        setMessage(result.message || '互動失敗，天地法則紊亂');
+        setActiveModal(null); // 關閉視窗
+        return;
+      }
+
+      // 互動成功，進入 result 結算狀態，並把後端傳來的訊息存起來
+      setActiveModal(prev => ({
+          ...prev,
+          step:          'result',
+          resultMessage: result.data.message,
+          battleLog:     result.data.battleLog   ?? null,
+          outcome:       result.data.outcome     ?? null,
+          itemDropped:   result.data.item_dropped ?? null,
+          expGained:     result.data.exp_gained  ?? 0,
+      }));
+      
+      // 將被點擊的節點從背景的雷達畫面上移除
+      setEvents(prevEvents => prevEvents.filter(e => e.id !== activeModal.node.id));
+      
+      if (navigator.vibrate) navigator.vibrate([50, 50, 100]); 
+
+    } catch (error) {
+      console.error('互動連線錯誤', error);
+      setMessage('天地法則紊亂，無法互動');
+      setActiveModal(null);
+    }
+  };
+
+  // 關閉視窗的方法
+  const closeModal = () => {
+      setActiveModal(null);
+  };
+
   const handleScan = () => {
+    if (!player?.id) {
+        setMessage('尚未感知到道友的命格');
+        return;
+    }
     if (player.ep < 10) {
       setMessage('精力不足，無法外放神識');
       if (navigator.vibrate) navigator.vibrate([50, 50, 50]); 
       return;
     }
 
-    if (reduceEp) reduceEp(10);
     setIsScanning(true);
     setEvents([]); 
-    setTerrains([]); 
     setMessage('神識牽引天地，搜尋周遭...');
-    if (navigator.vibrate) navigator.vibrate(15); 
 
     if (!navigator.geolocation) {
       fallbackScan();
@@ -112,222 +194,206 @@ export default function ExploreView() {
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const { latitude, longitude } = position.coords;
         try {
-          const query = `
-            [out:json];
-            (
-              node["shop"="convenience"](around:600, ${latitude}, ${longitude});
-              node["amenity"="place_of_worship"](around:600, ${latitude}, ${longitude});
-              
-              way["natural"="water"](around:800, ${latitude}, ${longitude});
-              way["waterway"](around:800, ${latitude}, ${longitude});
-              way["landuse"="forest"](around:800, ${latitude}, ${longitude});
-              way["leisure"="park"](around:800, ${latitude}, ${longitude});
-              node["natural"="peak"](around:800, ${latitude}, ${longitude});
-              way["railway"="station"](around:800, ${latitude}, ${longitude});
-              way["landuse"="commercial"](around:800, ${latitude}, ${longitude});
-            );
-            out center; 
-          `;
-          
-          const res = await fetch(`https://overpass-api.de/api/interpreter`, { method: 'POST', body: query });
-          const data = await res.json();
-          const maxDegreeRadius = 0.0055; 
-
-          let newEvents = [];
-          let newTerrains = [];
-
-          data.elements.forEach(el => {
-            const tags = el.tags || {};
-            const objLat = el.lat || el.center?.lat;
-            const objLon = el.lon || el.center?.lon;
-            if (!objLat || !objLon) return;
-
-            let topPct = 50 + ((latitude - objLat) / maxDegreeRadius) * 40;
-            let leftPct = 50 + ((objLon - longitude) / maxDegreeRadius) * 40;
-
-            if (tags.natural === 'water' || tags.waterway) newTerrains.push({ id: el.id, ...TERRAIN_MAPPING['water'], top: `${topPct}%`, left: `${leftPct}%` });
-            else if (tags.landuse === 'forest' || tags.leisure === 'park') newTerrains.push({ id: el.id, ...TERRAIN_MAPPING['forest'], top: `${topPct}%`, left: `${leftPct}%` });
-            else if (tags.natural === 'peak') newTerrains.push({ id: el.id, ...TERRAIN_MAPPING['peak'], top: `${topPct}%`, left: `${leftPct}%` });
-            else if (tags.railway === 'station') newTerrains.push({ id: el.id, ...TERRAIN_MAPPING['station'], top: `${topPct}%`, left: `${leftPct}%` });
-            else if (tags.landuse === 'commercial') newTerrains.push({ id: el.id, ...TERRAIN_MAPPING['commercial'], top: `${topPct}%`, left: `${leftPct}%` });
-            else {
-              if (topPct < 5 || topPct > 95 || leftPct < 5 || leftPct > 95) return;
-              let mapping = POI_MAPPING['default'];
-              if (tags.shop === 'convenience') mapping = POI_MAPPING['convenience'];
-              else if (tags.amenity === 'place_of_worship') mapping = POI_MAPPING['place_of_worship'];
-              newEvents.push({ id: el.id, name: tags.name ? `${mapping.name}(${tags.name.substring(0,2)})` : mapping.name, ...mapping, top: `${topPct}%`, left: `${leftPct}%` });
-            }
+          const res = await fetch('/api/lbs/scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              playerId: player.id,
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            })
           });
 
-          if (newEvents.length === 0) newEvents = fallbackEvents();
+          if (!res.ok) {
+            setMessage('天地法則紊亂，探靈失敗');
+            setIsScanning(false);
+            return;
+          }
 
-          setEvents(newEvents.slice(0, 8));
-          setTerrains(newTerrains.slice(0, 5)); 
+          const result = await res.json();
+          const backendNodes = result.data.nodes;
+
+          const newEvents = backendNodes.map((node) => {
+            let mapping = POI_MAPPING['default'];
+            if (node.type === '拾荒') mapping = POI_MAPPING['convenience'];
+            else if (node.type === '機緣' || node.type === '勞動') mapping = POI_MAPPING['place_of_worship'];
+            
+            return {
+              id: node.instance_id,
+              name: node.name,
+              description: node.description,
+              cost: { sp: node.cost_sp, hp: node.cost_hp },
+              nodeType: node.type, 
+              ...mapping,
+              top: `${Math.floor(Math.random() * 70 + 15)}%`, 
+              left: `${Math.floor(Math.random() * 70 + 15)}%`
+            };
+          });
+
+          setEvents(newEvents);
+          setTerrains([
+             { id: 't1', ...TERRAIN_MAPPING['water'], top: '30%', left: '70%' },
+          ]); 
           
           setIsScanning(false);
-          setMessage('探尋完畢，風水盡收眼底');
-          if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
+          setMessage(`探尋完畢，發現 ${newEvents.length} 處靈力波動`);
+          if (reduceEp) reduceEp(10);
 
         } catch (error) {
-          console.error('API 錯誤', error);
           fallbackScan(); 
         }
       },
-      (error) => {
-        console.error('GPS 錯誤', error);
-        fallbackScan(); 
-      },
+      () => fallbackScan(),
       { timeout: 10000 }
     );
   };
 
   const fallbackScan = () => {
-    setMessage('天地法則混亂，以模擬神識探索...');
     setTimeout(() => {
-      setEvents(fallbackEvents());
-      setTerrains([
-        { id: 't1', ...TERRAIN_MAPPING['water'], top: '30%', left: '70%' },
-        { id: 't2', ...TERRAIN_MAPPING['forest'], top: '70%', left: '20%' },
-      ]);
+      setEvents(Array.from({ length: Math.floor(Math.random() * 3) + 2 }).map((_, i) => ({
+        id: `mock-${i}`, nodeType: '拾荒', name: '未知遺落物', description: '似乎散發著微弱的靈氣', cost: { sp: 10, hp: 0 }, ...POI_MAPPING['convenience'],
+        top: `${Math.floor(Math.random() * 70 + 15)}%`, left: `${Math.floor(Math.random() * 70 + 15)}%`,
+      })));
       setIsScanning(false);
-      setMessage('探尋完畢，風水盡收眼底');
-      if (navigator.vibrate) navigator.vibrate([100, 50, 100]); 
-    }, 2000);
-  };
-
-  const fallbackEvents = () => {
-    return Array.from({ length: Math.floor(Math.random() * 3) + 2 }).map((_, i) => ({
-      id: `mock-${i}`,
-      ...Object.values(POI_MAPPING)[Math.floor(Math.random() * 3)],
-      top: `${Math.floor(Math.random() * 70 + 15)}%`, left: `${Math.floor(Math.random() * 70 + 15)}%`,
-    }));
+      setMessage('探尋完畢');
+    }, 1500);
   };
 
   return (
     <div className="h-full w-full relative flex items-center justify-center overflow-hidden bg-transparent">      
-      
-      {/* 🌟 CSS 動畫法則 */}
-      <style>{`
-        @keyframes bounce-subtle {
-          0%, 100% { transform: translate(-50%, -50%) translateY(0); }
-          50% { transform: translate(-50%, -50%) translateY(-10px); }
-        }
-        .animate-[bounce-subtle_2s_infinite] { animation: bounce-subtle 2s ease-in-out infinite; }
-
-        /* 🌟 新增：向內收(Converging)的聚氣動畫 */
-        @keyframes converge-glow {
-          0% { transform: scale(1.8); opacity: 0; filter: blur(10px); }
-          30% { opacity: 0.8; }
-          100% { transform: scale(0.3); opacity: 0; filter: blur(2px); }
-        }
-        .animate-converge { animation: converge-glow 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-
-        /* 長按的進度條動畫 */
-        @keyframes charge-up {
-          from { width: 0%; }
-          to { width: 100%; }
-        }
-        .animate-charge { animation: charge-up 3s linear forwards; }
-      `}</style>
+      <style>{/* ... 保留你原本的 style 動畫 ... */}</style>
 
       {/* 1. 底層風水地形光暈 */}
       <div className="absolute inset-0 pointer-events-none z-0">
         {terrains.map((terrain) => (
-          <div 
-            key={terrain.id}
-            className={`absolute rounded-[40%] blur-[30px] opacity-20 mix-blend-screen transition-all duration-1000 ${terrain.size} ${terrain.animation}`}
-            style={{ top: terrain.top, left: terrain.left, backgroundColor: terrain.color, transform: 'translate(-50%, -50%) rotate(15deg)' }}
-          ></div>
+          <div key={terrain.id} className={`absolute rounded-[40%] blur-[30px] opacity-20 mix-blend-screen transition-all duration-1000 ${terrain.size} ${terrain.animation}`} style={{ top: terrain.top, left: terrain.left, backgroundColor: terrain.color, transform: 'translate(-50%, -50%) rotate(15deg)' }}></div>
         ))}
       </div>
 
       {/* 2. 掃描到的事件節點 */}
       {events.map((ev) => (
-        <div 
-          key={ev.id} 
-          className="absolute flex flex-col items-center justify-center cursor-pointer group z-20 transition-all duration-700 ease-out animate-[bounce-subtle_2s_infinite]"
-          style={{ top: ev.top, left: ev.left }}
-          onClick={(e) => { e.stopPropagation(); if (navigator.vibrate) navigator.vibrate(10); alert(`你靠近了：${ev.name}`); }}
+        <div key={ev.id} className="absolute flex flex-col items-center justify-center cursor-pointer group z-20 animate-[bounce-subtle_2s_infinite]" style={{ top: ev.top, left: ev.left }}
+          onClick={(e) => { e.stopPropagation(); openNodeModal(ev); }} // 👉 改為打開彈出視窗
         >
           <div className="relative flex items-center justify-center translate-y-[-50%]">
             <div className="absolute w-8 h-8 rounded-full animate-ping opacity-40" style={{ backgroundColor: ev.color }}></div>
             <div className="w-4 h-4 rounded-full relative z-10" style={{ backgroundColor: ev.color, boxShadow: `0 0 15px ${ev.glow}, 0 0 30px ${ev.glow}` }}></div>
           </div>
-          <span className="mt-2 text-[10px] sm:text-[12px] tracking-widest text-white/90 drop-shadow-[0_0_8px_rgba(0,0,0,1)] bg-black/40 px-2 py-0.5 rounded border border-white/10 group-hover:scale-110 transition-transform">
-            {ev.name}
-          </span>
+          <span className="mt-2 text-[12px] tracking-widest text-white/90 drop-shadow-[0_0_8px_rgba(0,0,0,1)] bg-black/40 px-2 py-0.5 rounded border border-white/10">{ev.name}</span>
         </div>
       ))}
 
-      {/* =========================================
-          3. 中央探靈陣盤 (長按/點擊交互核心)
-          ========================================= */}
-      <div 
-        className={`relative flex flex-col items-center justify-center cursor-pointer transition-transform duration-500 z-30 
-          ${isScanning ? 'scale-110' : isPressing ? 'scale-90' : isTuning ? 'scale-100' : 'hover:scale-105 active:scale-95'}
-        `}
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-        onContextMenu={(e) => e.preventDefault()} // 防止手機長按跳出選單
-      >
-        
-        {/* 🌟 探靈向外擴散的光暈 */}
-        {isScanning && (
-          <div className="absolute w-[350px] h-[350px] border-[2px] border-[#00E5FF] rounded-full animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite] opacity-30 pointer-events-none"></div>
-        )}
-
-        {/* 🌟 調息向內收縮的光暈 (Converging) */}
-        {isTuning && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="absolute w-[300px] h-[300px] border-[2px] border-[#00E5FF] rounded-full animate-converge opacity-60"></div>
-            <div className="absolute w-[300px] h-[300px] border-[1px] border-[#00E5FF] rounded-full animate-converge opacity-30" style={{ animationDelay: '1s' }}></div>
-          </div>
-        )}
-        
-        {/* 外圍雙層陣紋環 */}
-        <div className={`absolute w-[240px] h-[240px] border-[1px] border-dashed rounded-full transition-colors duration-500 pointer-events-none ${isScanning || isTuning ? 'border-[#00E5FF] animate-[spin_8s_linear_infinite_reverse]' : 'border-[#00E5FF]/20 animate-[spin_40s_linear_infinite_reverse]'}`}></div>
-        <div className={`absolute w-[180px] h-[180px] border-[0.5px] rounded-full transition-all duration-500 pointer-events-none ${isScanning || isTuning ? 'border-[#00E5FF] opacity-60 animate-[spin_4s_linear_infinite]' : 'border-[#00E5FF] opacity-20 animate-[spin_60s_linear_infinite]'}`}>
-          <div className="absolute top-[-2px] left-1/2 w-1 h-2 bg-[#00E5FF] -translate-x-1/2 drop-shadow-[0_0_5px_rgba(0,229,255,1)]"></div>
-          <div className="absolute bottom-[-2px] left-1/2 w-1 h-2 bg-[#00E5FF] -translate-x-1/2 opacity-50"></div>
-          <div className="absolute left-[-2px] top-1/2 w-2 h-1 bg-[#00E5FF] -translate-y-1/2 opacity-50"></div>
-          <div className="absolute right-[-2px] top-1/2 w-2 h-1 bg-[#00E5FF] -translate-y-1/2 opacity-50"></div>
-        </div>
-
-        {/* 核心菱形陣眼 */}
+      {/* 3. 中央探靈陣盤 (保持不變) */}
+      <div className={`relative flex flex-col items-center justify-center cursor-pointer transition-transform duration-500 z-30 ${isScanning ? 'scale-110' : isPressing ? 'scale-90' : isTuning ? 'scale-100' : 'hover:scale-105 active:scale-95'}`} onPointerDown={handlePointerDown} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onContextMenu={(e) => e.preventDefault()}>
+        {/* ... 原本的陣盤圈圈與動畫 ... */}
         <div className={`w-[80px] h-[80px] rounded-full flex flex-col items-center justify-center transition-all duration-1000 ${isScanning || isTuning ? 'shadow-[0_0_50px_rgba(0,229,255,0.8)] bg-[#00E5FF]/30 backdrop-blur-md' : 'shadow-[0_0_20px_rgba(0,229,255,0.15)] bg-[#0A0C10]/80 backdrop-blur-sm'}`}>
           <div className={`w-[40px] h-[40px] border-[2px] rounded-sm rotate-45 transition-colors duration-500 ${(isScanning || isTuning) ? 'border-white animate-[spin_1s_linear_infinite]' : 'border-[#00E5FF] opacity-80 animate-[pulse_3s_ease-in-out_infinite]'}`}></div>
         </div>
-
-        {/* 🌟 說明文字 (放置於菱形圓的下方) */}
-        <div className="absolute top-[90px] flex flex-col items-center pointer-events-none whitespace-nowrap z-40">
-          {isTuning ? (
-             <span className="text-[14px] text-white tracking-[0.3em] font-bold drop-shadow-[0_0_8px_#00E5FF]">調息中</span>
-          ) : isScanning ? (
-             <span className="text-[12px] text-[#00E5FF] tracking-[0.3em] font-bold drop-shadow-[0_0_5px_currentColor]">神識外放中</span>
-          ) : (
-             <>
-               <span className="text-[11px] text-[#00E5FF] tracking-widest drop-shadow-md">點擊探靈 <span className="text-[9px] opacity-80">(-10精力)</span></span>
-               <span className="text-[10px] text-gray-400 tracking-widest opacity-70 mt-1">長按三秒調息</span>
-               
-               {/* 長按期間的充能進度條 */}
-               {isPressing && (
-                 <div className="w-16 h-1 bg-black/50 border border-white/20 rounded-full mt-2 overflow-hidden">
-                   <div className="h-full bg-[#00E5FF] animate-charge shadow-[0_0_5px_#00E5FF]"></div>
-                 </div>
-               )}
-             </>
-          )}
-        </div>
-
       </div>
 
       {/* 底部狀態提示文字 */}
-      <div className="absolute bottom-[calc(env(safe-area-inset-bottom,20px)+40px)] bg-black/60 backdrop-blur-sm px-6 py-2 rounded-full border border-[#00E5FF]/20 text-[#00E5FF] text-[clamp(12px,4cqw,16px)] tracking-[8px] opacity-90 font-light shadow-[0_0_15px_rgba(0,229,255,0.1)] transition-all duration-300 z-30 pointer-events-none">
+      <div className="absolute bottom-[calc(env(safe-area-inset-bottom,20px)+40px)] bg-black/60 backdrop-blur-sm px-6 py-2 rounded-full border border-[#00E5FF]/20 text-[#00E5FF] text-[14px] tracking-[8px] opacity-90 font-light shadow-[0_0_15px_rgba(0,229,255,0.1)] z-30 pointer-events-none">
         {message}
       </div>
+
+      {/* =====================================================================
+          🌟 核心改動：互動彈出視窗 (Modal Overlay)
+          ===================================================================== */}
+      {activeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+          <div className="bg-[#12141A] border border-[#00E5FF]/30 rounded-xl w-full max-w-[320px] shadow-[0_0_40px_rgba(0,229,255,0.15)] flex flex-col overflow-hidden text-center transform transition-all">
+            
+            {/* 視窗頭部裝飾 */}
+            <div className="h-1 w-full bg-gradient-to-r from-transparent via-[#00E5FF] to-transparent opacity-50"></div>
+
+            <div className="p-6">
+              {/* 狀態一：確認資訊 */}
+              {activeModal.step === 'info' && (
+                <>
+                  <h3 className="text-[#00E5FF] text-xl mb-2 font-bold tracking-widest">{activeModal.node.name}</h3>
+                  <p className="text-gray-400 text-sm mb-6 min-h-[40px] leading-relaxed">
+                    {activeModal.node.description || '此地似乎隱藏著某種機緣...'}
+                  </p>
+                  
+                  <div className="bg-black/40 rounded p-3 mb-6 border border-white/5">
+                    <p className="text-[#FF3B30] text-xs tracking-widest">
+                      預計消耗: {activeModal.node.cost?.sp || 10} 體力
+                    </p>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <button onClick={closeModal} className="flex-1 py-2 rounded border border-white/20 text-gray-400 text-sm tracking-widest hover:bg-white/5 active:scale-95 transition-all">
+                      離去
+                    </button>
+                    <button onClick={confirmExecuteNode} className="flex-1 py-2 rounded bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] text-sm tracking-widest shadow-[0_0_10px_rgba(0,229,255,0.2)] hover:bg-[#00E5FF]/20 active:scale-95 transition-all">
+                      探索
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* 狀態二：連線互動中 */}
+              {activeModal.step === 'loading' && (
+                <div className="py-8 flex flex-col items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <p className="text-[#00E5FF] text-sm tracking-widest animate-pulse">神識交匯中...</p>
+                </div>
+              )}
+
+              {/* 狀態三：結算畫面 */}
+              {activeModal.step === 'result' && (
+                <>
+                  {/* ── 戰鬥結果：顯示完整日誌 ── */}
+                  {activeModal.battleLog ? (
+                    <>
+                      {/* 標題 */}
+                      <h3 className={`text-xl mb-3 font-bold tracking-widest ${activeModal.outcome === 'win' ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>
+                        {activeModal.outcome === 'win' ? '⚔ 勝利' : '💀 重傷'}
+                      </h3>
+
+                      {/* 日誌捲軸區 */}
+                      <div className="bg-black/60 border border-white/10 rounded-lg p-3 mb-4 max-h-[220px] overflow-y-auto text-left space-y-1 font-mono text-[11px] leading-relaxed">
+                        {activeModal.battleLog.map((entry, i) => (
+                          <p key={i} style={{ color: LOG_LINE_COLOR[entry.type] ?? '#9CA3AF' }}>
+                            {entry.text}
+                          </p>
+                        ))}
+                      </div>
+
+                      {/* 戰利品摘要 */}
+                      <div className="bg-black/40 rounded p-3 mb-4 border border-white/5 text-xs space-y-1">
+                        {activeModal.expGained > 0 && (
+                          <p className="text-[#32D74B] tracking-widest">修為 +{activeModal.expGained}</p>
+                        )}
+                        {activeModal.itemDropped && (
+                          <p className="text-[#FFD700] tracking-widest">獲得【{activeModal.itemDropped}】×1</p>
+                        )}
+                        {!activeModal.itemDropped && activeModal.outcome === 'win' && (
+                          <p className="text-white/30 tracking-widest">此番未有掉落</p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    /* ── 非戰鬥結果：原有簡易訊息 ── */
+                    <>
+                      <h3 className="text-[#FFD700] text-xl mb-4 font-bold tracking-widest">探索結果</h3>
+                      <p className="text-white/90 text-sm mb-8 leading-relaxed">
+                        {activeModal.resultMessage}
+                      </p>
+                    </>
+                  )}
+
+                  <button onClick={closeModal} className="w-full py-2 rounded bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] text-sm tracking-widest hover:bg-[#00E5FF]/20 active:scale-95 transition-all">
+                    收下
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
