@@ -12,7 +12,7 @@ import { query } from '../config/db.js';
 export async function syncAuth(authId, name = null, gender = null) {
     // 查詢是否已有角色（id 與 auth_id 皆指向同一個 Supabase UUID）
     const existing = await query(
-        'SELECT * FROM players WHERE id = $1 OR auth_id = $1',
+        'SELECT * FROM players WHERE id = $1::uuid OR auth_id = $1',
         [authId]
     );
 
@@ -33,7 +33,7 @@ export async function syncAuth(authId, name = null, gender = null) {
              hp, max_hp, sp, max_sp, ep, max_ep,
              attack, defense, realm_level, mind,
              silver, spirit_stones, last_sync_time)
-         VALUES ($1, $1, $2, $3,
+         VALUES ($1::uuid, $1, $2, $3,
                  100, 100, 100, 100, 100, 100,
                  10, 5, 1, 0,
                  50, 0, NOW())
