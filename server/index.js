@@ -26,8 +26,9 @@ app.use(express.static(join(__dirname, '../dist')));
 
 // ── SPA Catch-all：非 API 請求一律回傳 index.html ────────────
 // 這條路由一定要放在所有 /api/... 路由的最下方
-app.get('*', (req, res) => {
-    res.sendFile(join(__dirname, '../dist/index.html'));
+// 新寫法 (完美避開版本衝突 👇)
+app.get(/.*/, (req, res) => {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
