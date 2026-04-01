@@ -2,14 +2,17 @@
  * AuthScreen.jsx — 《鏡界》開場法器啟動動畫 + 無密碼登入 + 創角
  *
  * Phase 狀態機：
- *   'drawing'  (0–2.5s) → SVG 文字外框描繪流光
- *   'flash'    (2.5–3s) → 文字填滿，全螢幕白光
- *   'login'    (3s+)    → 陣法網格背景 + 登入 UI
- *   'create'            → 創角 UI (gameStage 變為 'naming' 後切入)
+ *   null / 'waiting'  → 等 document.fonts.ready（避免字體未載入就開始描邊動畫）
+ *   'drawing' (0–2.5s) → SVG 文字外框描繪流光
+ *   'flash'   (2.5–3s) → 文字填滿，全螢幕白光
+ *   'login'   (3s+)    → 陣法網格背景 + 登入 UI
+ *   'create'           → 創角 UI (gameStage 變為 'naming' 後切入)
  *
  * 不依賴 Framer Motion；所有動畫皆純 CSS @keyframes。
+ * 版面單位：cqw 已全部改為 vw（Container Query 需明確設定 container-type，
+ * 改用 vw 在所有瀏覽器更穩定，搭配 clamp() 防止桌機過大）。
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import useGameStore from '../store/gameStore';
 
 // ─────────────────────────────────────────────────────────────
@@ -129,13 +132,13 @@ const ANIM_CSS = `
   /* ── 輸入框共用 ──────────────────────────────────── */
   .mir-input {
     width: 100%;
-    padding: 3cqw 4cqw;
+    padding: clamp(8px, 3vw, 12px) clamp(10px, 4vw, 16px);
     border-radius: 0.75rem;
     border: 1px solid rgba(100,120,140,0.35);
     background: rgba(10,15,22,0.7);
     color: #e2e8f0;
     font-family: 'Kaiti', serif;
-    font-size: 4cqw;
+    font-size: clamp(13px, 4vw, 16px);
     outline: none;
     transition: border-color 0.2s;
     backdrop-filter: blur(4px);
@@ -150,10 +153,10 @@ const ANIM_CSS = `
   /* ── 按鈕共用 ────────────────────────────────────── */
   .mir-btn {
     width: 100%;
-    padding: 3cqw 0;
+    padding: clamp(8px, 3vw, 12px) 0;
     border-radius: 0.75rem;
     font-family: 'Kaiti', serif;
-    font-size: 4cqw;
+    font-size: clamp(13px, 4vw, 16px);
     letter-spacing: 0.05em;
     cursor: pointer;
     transition: background 0.2s, border-color 0.2s, opacity 0.2s;
@@ -191,7 +194,9 @@ const GENDERS = [
 // ─────────────────────────────────────────────────────────────
 export default function AuthScreen() {
   // Phase 狀態機
-  const [phase,     setPhase]     = useState('drawing');
+  // 'waiting' → 等 document.fonts.ready，確保 Ma Shan Zheng 載入後
+  // 再開始 stroke-dasharray 動畫，避免 fallback 字體路徑長度偏差
+  const [phase,     setPhase]     = useState('waiting');
   // OTP 子步驟
   const [otpStep,   setOtpStep]   = useState('email');  // 'email' | 'code'
   // 表單欄位
@@ -210,21 +215,28 @@ export default function AuthScreen() {
   const verifyOtp       = useGameStore(s => s.verifyOtp);
   const createCharacter = useGameStore(s => s.createCharacter);
 
+  // ── 等字體載入完成後才啟動動畫 ─────────────────────────────
+  // document.fonts.ready 在字體完成解析後 resolve，確保 Ma Shan Zheng
+  // 的字形輪廓長度與 stroke-dasharray: 2400 的估算值相符
+  useEffect(() => {
+    document.fonts.ready.then(() => setPhase('drawing'));
+  }, []);
+
   // ── Phase 自動推進 ──────────────────────────────────────────
   useEffect(() => {
     if (phase === 'drawing') {
-      // 等描繪動畫跑完（2.5s），切到 flash
       const t = setTimeout(() => setPhase('flash'), 2500);
       return () => clearTimeout(t);
     }
     if (phase === 'flash') {
-      // 白光閃過 0.5s 後，進入登入介面
       const t = setTimeout(() => setPhase('login'), 500);
       return () => clearTimeout(t);
     }
   }, [phase]);
 
   // ── 當 store 通知要創角時，切入 create ─────────────────────
+  // 若 _syncPlayerWithBackend 在 drawing/flash 期間就回傳 isNew:true，
+  // 等 phase 自然推進到 'login' 時此 effect 會再次觸發並正確切換
   useEffect(() => {
     if (gameStage === 'naming' && phase === 'login') {
       setPhase('create');
@@ -257,7 +269,7 @@ export default function AuthScreen() {
   const handleGoogleLogin = async () => {
     setIsLoading(true); setMessage('');
     const r = await loginWithGoogle();
-    // 成功：頁面跳轉，無需處理
+    // 成功：頁面跳轉至 Google，無需在此處理
     if (!r.success) { setIsLoading(false); setMessage(r.error ?? '連線失敗'); }
   };
 
@@ -274,9 +286,11 @@ export default function AuthScreen() {
   };
 
   // ── 字符 class 計算 ────────────────────────────────────────
-  const charCls = (base) => `${base} ${
-    phase === 'drawing' ? 'drawing' :
-    phase === 'flash'   ? 'flash'   : 'done'
+  // 'waiting' 時不加任何 phase class，保持 stroke-dashoffset:2400（不可見）
+  const charCls = (base) => `${base}${
+    phase === 'drawing'                        ? ' drawing' :
+    phase === 'flash'                          ? ' flash'   :
+    (phase === 'login' || phase === 'create')  ? ' done'    : ''
   }`;
 
   const isLoginOrCreate = phase === 'login' || phase === 'create';
@@ -292,11 +306,8 @@ export default function AuthScreen() {
           className="absolute inset-0 pointer-events-none mir-grid-layer"
           style={{
             backgroundImage: [
-              /* 中央暗藍光暈 */
               'radial-gradient(ellipse 70% 55% at 50% 45%, rgba(0,229,255,0.055) 0%, transparent 70%)',
-              /* 橫向網格線 */
               'linear-gradient(rgba(0,229,255,0.038) 1px, transparent 1px)',
-              /* 縱向網格線 */
               'linear-gradient(90deg, rgba(0,229,255,0.038) 1px, transparent 1px)',
             ].join(', '),
             backgroundSize: 'auto, 46px 46px, 46px 46px',
@@ -309,28 +320,22 @@ export default function AuthScreen() {
         <div className="absolute inset-0 bg-white pointer-events-none z-30 mir-flash-overlay" />
       )}
 
-      {/* ══ SVG 鏡界 LOGO（drawing / flash / login 三個 phase 可見）══ */}
+      {/* ══ SVG 鏡界 LOGO（waiting 時不可見，drawing/flash/login 可見）══ */}
       {phase !== 'create' && (
         <div
           className={`mir-svg-wrap ${phase === 'drawing' ? 'pulsing' : ''}`}
           style={{
-            /* login 時縮到頂部 */
-            transform:  isLoginOrCreate ? 'scale(0.72) translateY(-8cqw)' : 'scale(1)',
-            transition: 'transform 0.7s cubic-bezier(0.4,0,0.2,1)',
-            marginBottom: isLoginOrCreate ? '-4cqw' : '0',
+            transform:    isLoginOrCreate ? 'scale(0.72) translateY(-8vw)' : 'scale(1)',
+            transition:   'transform 0.7s cubic-bezier(0.4,0,0.2,1)',
+            marginBottom: isLoginOrCreate ? '-4vw' : '0',
           }}
         >
           <svg
             viewBox="0 0 440 175"
             xmlns="http://www.w3.org/2000/svg"
-            style={{ width: 'min(76cqw, 320px)', display: 'block' }}
+            style={{ width: 'min(76vw, 320px)', display: 'block' }}
             aria-label="鏡界"
           >
-            {/*
-              兩個 <text> 分別對應「鏡」和「界」，
-              各自帶 stroke-dashoffset 動畫，且「界」延遲 1.1s 開始，
-              製造依序被描繪出來的視覺效果。
-            */}
             <text
               x="120" y="50%" dominantBaseline="middle" textAnchor="middle"
               fontFamily="'Ma Shan Zheng', serif"
@@ -353,10 +358,15 @@ export default function AuthScreen() {
 
       {/* ══ login phase：副標 + 登入表單 ═══════════════════════ */}
       {phase === 'login' && (
-        <div className="mir-ui-panel w-full px-[9cqw] flex flex-col gap-[3.5cqw]" style={{ maxWidth: 420 }}>
-
+        <div
+          className="mir-ui-panel w-full flex flex-col"
+          style={{ maxWidth: 420, padding: '0 9vw', gap: '3.5vw' }}
+        >
           {/* 副標 */}
-          <p className="text-cyan-300/60 font-kaiti text-[3.8cqw] text-center tracking-[0.45em] mb-[1cqw]">
+          <p
+            className="font-kaiti text-center tracking-[0.45em]"
+            style={{ color: 'rgba(103,232,249,0.6)', fontSize: 'clamp(12px, 3.8vw, 15px)', marginBottom: '1vw' }}
+          >
             踏入仙途，尋覓長生
           </p>
 
@@ -366,9 +376,12 @@ export default function AuthScreen() {
           </button>
 
           {/* 分隔 */}
-          <div className="flex items-center gap-[3cqw]">
+          <div className="flex items-center" style={{ gap: '3vw' }}>
             <div className="flex-1 h-px" style={{ background: 'rgba(0,229,255,0.15)' }} />
-            <span className="font-kaiti text-[3cqw] tracking-widest" style={{ color: 'rgba(120,140,160,0.8)' }}>
+            <span
+              className="font-kaiti tracking-widest"
+              style={{ color: 'rgba(120,140,160,0.8)', fontSize: 'clamp(11px, 3vw, 13px)' }}
+            >
               飛劍傳書
             </span>
             <div className="flex-1 h-px" style={{ background: 'rgba(0,229,255,0.15)' }} />
@@ -394,12 +407,15 @@ export default function AuthScreen() {
           {/* OTP 第二步：驗證碼 */}
           {otpStep === 'code' && (
             <>
-              <p className="font-kaiti text-[3.4cqw] text-center" style={{ color: 'rgba(148,163,184,0.85)' }}>
+              <p
+                className="font-kaiti text-center"
+                style={{ color: 'rgba(148,163,184,0.85)', fontSize: 'clamp(12px, 3.4vw, 14px)' }}
+              >
                 符文已傳至：<span style={{ color: '#67e8f9' }}>{email}</span>
               </p>
               <input
                 className="mir-input text-center"
-                style={{ fontSize: '5.5cqw', letterSpacing: '0.55em', color: '#a5f3fc' }}
+                style={{ fontSize: 'clamp(16px, 5.5vw, 22px)', letterSpacing: '0.55em', color: '#a5f3fc' }}
                 type="text"
                 inputMode="numeric"
                 placeholder="— — — — — —"
@@ -415,8 +431,11 @@ export default function AuthScreen() {
                 {isLoading ? '驗印中…' : '▶ 以符文踏入仙途'}
               </button>
               <button
-                style={{ background: 'none', border: 'none', color: 'rgba(100,116,139,0.8)',
-                         fontFamily: "'Kaiti', serif", fontSize: '3cqw', cursor: 'pointer', textDecoration: 'underline' }}
+                style={{
+                  background: 'none', border: 'none', color: 'rgba(100,116,139,0.8)',
+                  fontFamily: "'Kaiti', serif", fontSize: 'clamp(11px, 3vw, 13px)',
+                  cursor: 'pointer', textDecoration: 'underline',
+                }}
                 onClick={() => { setOtpStep('email'); setCode(''); setMessage(''); }}
               >
                 重新輸入 Email
@@ -426,8 +445,10 @@ export default function AuthScreen() {
 
           {/* 訊息提示 */}
           {message && (
-            <p className="font-kaiti text-[3.5cqw] text-center leading-relaxed"
-               style={{ color: '#fcd34d' }}>
+            <p
+              className="font-kaiti text-center leading-relaxed"
+              style={{ color: '#fcd34d', fontSize: 'clamp(12px, 3.5vw, 14px)' }}
+            >
               {message}
             </p>
           )}
@@ -436,30 +457,38 @@ export default function AuthScreen() {
 
       {/* ══ create phase：創角 UI ════════════════════════════════ */}
       {phase === 'create' && (
-        <div className="mir-ui-panel w-full px-[9cqw] flex flex-col gap-[4cqw]" style={{ maxWidth: 420 }}>
-
+        <div
+          className="mir-ui-panel w-full flex flex-col"
+          style={{ maxWidth: 420, padding: '0 9vw', gap: '4vw' }}
+        >
           {/* 標題 */}
-          <div className="text-center mb-[1cqw]">
+          <div className="text-center" style={{ marginBottom: '1vw' }}>
             <h2
-              className="font-calligraphy text-[9.5cqw] tracking-widest"
-              style={{ color: '#cff2fd', textShadow: '0 0 22px rgba(0,229,255,0.35)' }}
+              className="font-calligraphy tracking-widest"
+              style={{
+                color: '#cff2fd',
+                fontSize: 'clamp(28px, 9.5vw, 38px)',
+                textShadow: '0 0 22px rgba(0,229,255,0.35)',
+              }}
             >
               凝聚命格
             </h2>
-            <p className="font-kaiti text-[3.5cqw] mt-[1.5cqw] tracking-wide"
-               style={{ color: 'rgba(120,140,160,0.8)' }}>
+            <p
+              className="font-kaiti tracking-wide"
+              style={{ color: 'rgba(120,140,160,0.8)', fontSize: 'clamp(12px, 3.5vw, 14px)', marginTop: '1.5vw' }}
+            >
               凡人初入仙途，先定道號與根骨
             </p>
           </div>
 
           {/* 道號 */}
-          <div className="flex flex-col gap-[2cqw]">
-            <label className="font-kaiti text-[3.5cqw]" style={{ color: 'rgba(148,163,184,0.85)' }}>
+          <div className="flex flex-col" style={{ gap: '2vw' }}>
+            <label className="font-kaiti" style={{ color: 'rgba(148,163,184,0.85)', fontSize: 'clamp(12px, 3.5vw, 14px)' }}>
               道號（2–6 字）
             </label>
             <input
               className="mir-input text-center"
-              style={{ fontSize: '5cqw' }}
+              style={{ fontSize: 'clamp(15px, 5vw, 20px)' }}
               type="text"
               placeholder="請輸入道友名諱…"
               value={name}
@@ -469,27 +498,27 @@ export default function AuthScreen() {
           </div>
 
           {/* 性別 */}
-          <div className="flex flex-col gap-[2cqw]">
-            <label className="font-kaiti text-[3.5cqw]" style={{ color: 'rgba(148,163,184,0.85)' }}>
+          <div className="flex flex-col" style={{ gap: '2vw' }}>
+            <label className="font-kaiti" style={{ color: 'rgba(148,163,184,0.85)', fontSize: 'clamp(12px, 3.5vw, 14px)' }}>
               根骨（性別）
             </label>
-            <div className="flex gap-[2.5cqw]">
+            <div className="flex" style={{ gap: '2.5vw' }}>
               {GENDERS.map(g => (
                 <button
                   key={g.value}
                   onClick={() => setGender(g.value)}
                   style={{
                     flex: 1,
-                    padding: '3cqw 0',
+                    padding: 'clamp(8px, 3vw, 12px) 0',
                     borderRadius: '0.75rem',
                     fontFamily: "'Kaiti', serif",
-                    fontSize: '3.4cqw',
+                    fontSize: 'clamp(11px, 3.4vw, 14px)',
                     cursor: 'pointer',
                     transition: 'all 0.18s',
-                    background: gender === g.value ? 'rgba(0,60,80,0.6)'     : 'rgba(15,20,30,0.7)',
+                    background: gender === g.value ? 'rgba(0,60,80,0.6)'              : 'rgba(15,20,30,0.7)',
                     border:     gender === g.value ? '1px solid rgba(0,229,255,0.55)' : '1px solid rgba(60,75,95,0.45)',
-                    color:      gender === g.value ? '#a5f3fc'                : 'rgba(100,120,145,0.9)',
-                    boxShadow:  gender === g.value ? '0 0 10px rgba(0,229,255,0.15)' : 'none',
+                    color:      gender === g.value ? '#a5f3fc'                         : 'rgba(100,120,145,0.9)',
+                    boxShadow:  gender === g.value ? '0 0 10px rgba(0,229,255,0.15)'  : 'none',
                   }}
                 >
                   {g.label}
@@ -500,7 +529,7 @@ export default function AuthScreen() {
 
           {/* 錯誤 / 訊息 */}
           {message && (
-            <p className="font-kaiti text-[3.5cqw] text-center" style={{ color: '#f87171' }}>
+            <p className="font-kaiti text-center" style={{ color: '#f87171', fontSize: 'clamp(12px, 3.5vw, 14px)' }}>
               {message}
             </p>
           )}
@@ -508,7 +537,7 @@ export default function AuthScreen() {
           {/* 確認 */}
           <button
             className="mir-btn mir-btn-primary"
-            style={{ fontSize: '5cqw', letterSpacing: '0.2em', marginTop: '1cqw' }}
+            style={{ fontSize: 'clamp(15px, 5vw, 20px)', letterSpacing: '0.2em', marginTop: '1vw' }}
             onClick={handleCreateCharacter}
             disabled={name.trim().length < 2 || isLoading}
           >
