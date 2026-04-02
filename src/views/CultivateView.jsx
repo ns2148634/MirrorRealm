@@ -235,23 +235,21 @@ export default function CultivateView() {
         .animate-shrink-in-fade { animation: shrink-in-fade 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
       `}</style>
 
-      {/* 🌟 頂部操作列：L1 時隱藏（無標題），L2 時顯示收回/銘記按鈕 */}
-      <div className="pt-[2vh] px-[6cqw] shrink-0 relative flex justify-between items-center mb-[2vh] h-[40px] z-50">
-        <div className={`absolute inset-0 flex justify-between items-center px-[6cqw] transition-all duration-300 ${getL2AnimationClass()}`}>
-          <button onClick={handleReturnOverview} className="text-gray-400 hover:text-white tracking-widest text-[14px] flex items-center gap-1 active:scale-95 transition-all">
-            <span className="text-lg leading-none mt-[-2px]">‹</span> 收回神識
-          </button>
-          <button 
-            onClick={handleSaveConfiguration} disabled={!isModified || isSaving}
-            className={`px-4 py-1.5 rounded-full text-[12px] tracking-[0.3em] transition-all duration-300 border ${
-              isSaving ? 'bg-white/20 border-white/40 text-white animate-pulse' :
-              isModified && !isOverloaded ? `bg-[${auraColor}]/20 border-[${auraColor}] text-[${auraColor}] shadow-[0_0_15px_${auraColor}40] active:scale-95` 
-                : 'bg-black/50 border-white/10 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            {isSaving ? '周天運轉...' : '銘記法陣'}
-          </button>
-        </div>
+      {/* 🌟 L2 懸浮按鈕：純絕對定位，L1 時不佔任何排版空間 */}
+      <div className={`absolute top-[4vh] left-0 right-0 flex justify-between items-center px-[8cqw] transition-all duration-300 z-50 ${getL2AnimationClass()}`}>
+        <button onClick={handleReturnOverview} className="text-gray-400 hover:text-white tracking-widest text-[14px] flex items-center gap-1 active:scale-95 transition-all">
+          <span className="text-lg leading-none mt-[-2px]">‹</span> 收回神識
+        </button>
+        <button
+          onClick={handleSaveConfiguration} disabled={!isModified || isSaving}
+          className={`px-4 py-1.5 rounded-full text-[12px] tracking-[0.3em] transition-all duration-300 border ${
+            isSaving ? 'bg-white/20 border-white/40 text-white animate-pulse' :
+            isModified && !isOverloaded ? `bg-[${auraColor}]/20 border-[${auraColor}] text-[${auraColor}] shadow-[0_0_15px_${auraColor}40] active:scale-95`
+              : 'bg-black/50 border-white/10 text-gray-500 cursor-not-allowed'
+          }`}
+        >
+          {isSaving ? '周天運轉...' : '銘記法陣'}
+        </button>
       </div>
 
       <div className="flex-1 flex flex-col px-[5cqw] pb-[calc(env(safe-area-inset-bottom,20px)+2vh)] overflow-hidden">

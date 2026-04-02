@@ -84,7 +84,8 @@ function classifyLine(line) {
 export async function runCombat(playerId) {
     // ── Step 1：讀取玩家戰鬥屬性 ───────────────────────────────
     const playerResult = await db.query(
-        `SELECT hp, sp, attack, defense, mind FROM players WHERE id = $1`,
+        `SELECT hp, sp, attack, defense, mind, realm_level,
+                crit_rate, crit_mult FROM players WHERE id = $1`,
         [playerId]
     );
     if (playerResult.rows.length === 0) throw new Error('找不到道友的命格');
@@ -124,16 +125,16 @@ export async function runCombat(playerId) {
         round++;
 
         // 玩家先手攻擊
-        const playerDmg = calcDamage(playerRow.attack, enemy.defense);
+        const { damage: playerDmg, isCrit: playerCrit } = calcDamageFinal(playerRow, enemy);
         enemyHp -= playerDmg;
         battleLog.push(
-            `第 ${round} 回合 ▸ 你出手，對【${enemy.name}】造成 ${playerDmg} 點傷害！` +
+            `第 ${round} 回合 ▸ 你出手${playerCrit ? '【暴擊】' : ''}，對【${enemy.name}】造成 ${playerDmg} 點傷害！` +
             `（妖獸剩餘氣血: ${Math.max(0, enemyHp)}）`
         );
         if (enemyHp <= 0) break; // 玩家這回合擊殺，直接結束
 
         // 敵人反擊
-        const enemyDmg = calcDamage(enemy.attack, playerRow.defense);
+        const { damage: enemyDmg } = calcDamageFinal(enemy, playerRow);
         playerHp -= enemyDmg;
         battleLog.push(
             `第 ${round} 回合 ▸ 【${enemy.name}】反撲！你受到 ${enemyDmg} 點傷害。` +
