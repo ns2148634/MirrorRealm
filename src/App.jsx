@@ -4,8 +4,9 @@ import { AnimatePresence } from 'framer-motion';
 import useGameStore from './store/gameStore';
 
 import AuthScreen   from './views/AuthScreen';
-import PlayingStage from './views/PlayingStage'; // 注意：確保路徑正確
-
+import PlayingStage from './components/PlayingStage';
+// ──────────────────────────────────────────────────────────────────────────────
+// 🌟 核心改動：在 App.jsx 中加入開場動畫防護鎖，確保星斗連線動畫一定會播完
 export default function App() {
   const gameStage            = useGameStore(s => s.gameStage);
   const checkAuthAndPlayer   = useGameStore(s => s.checkAuthAndPlayer);
