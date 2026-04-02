@@ -1,39 +1,44 @@
 // src/views/CultivateView.jsx
-import React, { useState } from 'react';
-import useGameStore from '../store/gameStore'; 
+import React, { useState, useEffect } from 'react';
+import useGameStore from '../store/gameStore';
 
-// 模擬玩家擁有的功法與法寶庫 
-const MOCK_INVENTORY = {
-  mainMethod: [
-    { id: 'm1', name: '青木長春訣', desc: '【主功法】每回合恢復 5% 靈力', level: '第三層', color: '#32D74B' },
-    { id: 'm2', name: '大日如來真解', desc: '【主功法】火/陽屬性法術威力提升 30%', level: '第一層', color: '#FF3B30' }
-  ],
-  subMethod: [
-    { id: 's1', name: '游龍步', desc: '【副功法】增加 15% 閃避機率', level: '小成', color: '#00E5FF' },
-    { id: 's2', name: '斂息術', desc: '【副功法】降低被高階妖獸發現機率', level: '大成', color: '#00E5FF' }
-  ],
-  talisman: [
-    { id: 't1', name: '烈火符', cost: 2, desc: '爆發 150 點火屬性傷害', color: '#9B5CFF' },
-    { id: 't2', name: '神行符', cost: 1, desc: '短暫提升極高閃避', color: '#9B5CFF' },
-    { id: 't3', name: '金剛符', cost: 3, desc: '抵擋致命傷害', color: '#9B5CFF' }
-  ],
-  artifact: [
-    { id: 'a1', name: '青木劍', cost: 10, drain: 20, desc: '消耗20靈力，造成80傷害', color: '#FFD700' },
-    { id: 'a2', name: '玄鐵重印', cost: 15, drain: 40, desc: '造成180傷害，具備破甲', color: '#FFD700' },
-    { id: 'a3', name: '引魂鈴', cost: 12, drain: 15, desc: '機率造成敵方神識混亂', color: '#FFD700' }
-  ],
-  formation: [
-    { id: 'f1', name: '小聚靈陣', cost: 5, desc: '戰鬥中靈氣回覆速度+10%', color: '#32D74B' },
-    { id: 'f2', name: '四象鎖妖陣', cost: 15, desc: '開場束縛敵方 1 回合', color: '#FFD700' }
-  ],
-  puppet: [
-    { id: 'p1', name: '木牛流馬', cost: 5, desc: '增加背包負重', color: '#E2E8F0' },
-    { id: 'p2', name: '機關銅人', cost: 12, desc: '代為承受 20% 物理傷害', color: '#FFD700' }
-  ],
-  pet: [
-    { id: 'pet1', name: '尋寶鼠', cost: 8, desc: '探索時機緣發現率+15%', color: '#FF9500' }
-  ]
+// 品階對應顏色
+const RARITY_COLOR_MAP = {
+  white:  '#FFFFFF',
+  green:  '#32D74B',
+  blue:   '#00E5FF',
+  purple: '#9B5CFF',
+  gold:   '#FFD700',
+  red:    '#FF3B30',
 };
+
+// 將背包 API 回傳資料轉為修煉頁所需格式
+function transformCultivateInventory(apiItems) {
+  const result = { mainMethod: [], subMethod: [], artifact: [], talisman: [], formation: [], puppet: [], pet: [] };
+  for (const item of apiItems) {
+    const base = {
+      id:    String(item.item_id),
+      name:  item.name,
+      desc:  item.description ?? '',
+      color: RARITY_COLOR_MAP[item.rarity] ?? '#FFFFFF',
+      cost:  item.effect_value ?? 0,
+    };
+    switch (item.item_type) {
+      case '主功法': result.mainMethod.push(base); break;
+      case '副功法': result.subMethod.push(base); break;
+      case '功法':   result.subMethod.push(base); break;
+      case '法器':   result.artifact.push({ ...base, drain: item.effect_value ?? 0 }); break;
+      case '符籙':   result.talisman.push(base); break;
+      case '陣法':   result.formation.push(base); break;
+      case '傀儡':   result.puppet.push(base); break;
+      case '靈獸':   result.pet.push(base); break;
+      default: break;
+    }
+  }
+  return result;
+}
+
+const EMPTY_CULTIVATE_INVENTORY = { mainMethod: [], subMethod: [], artifact: [], talisman: [], formation: [], puppet: [], pet: [] };
 
 // 初始空裝備配置
 const initialLoadout = {
@@ -43,9 +48,19 @@ const initialLoadout = {
 
 export default function CultivateView() {
   const player = useGameStore((state) => state.player);
-  const isMale = player?.gender !== 'female'; 
-  const auraColor = isMale ? '#00E5FF' : '#9B5CFF'; 
+  const isMale = player?.gender !== 'female';
+  const auraColor = isMale ? '#00E5FF' : '#9B5CFF';
   const meditatorImg = player?.gender === 'female' ? 'meditator_female.svg' : 'meditator_male.svg';
+
+  const [inventory, setInventory] = useState(EMPTY_CULTIVATE_INVENTORY);
+
+  useEffect(() => {
+    if (!player?.id) return;
+    fetch(`/api/player/backpack/${player.id}`)
+      .then(r => r.json())
+      .then(json => { if (json.status === 'success') setInventory(transformCultivateInventory(json.data)); })
+      .catch(err => console.error('修煉庫載入失敗:', err));
+  }, [player?.id]);
 
   // 空間穿梭狀態機: overview (L1), layout-detail (L2), selecting (L3)
   const [viewState, setViewState] = useState('overview'); 
@@ -67,11 +82,11 @@ export default function CultivateView() {
   const [isSaving, setIsSaving] = useState(false);
 
   // 神識計算邏輯
-  const maxGodSense = 50; 
+  const maxGodSense = 50;
   let currentLoad = 0;
   Object.entries(gear.talisman).forEach(([id, count]) => {
-    const item = MOCK_INVENTORY.talisman.find(t => t.id === id);
-    if (item) currentLoad += item.cost * count;
+    const item = inventory.talisman.find(t => t.id === id);
+    if (item) currentLoad += (item.cost ?? 0) * count;
   });
   gear.artifact.forEach(item => currentLoad += item.cost);
   if (gear.formation) currentLoad += gear.formation.cost;
@@ -179,8 +194,9 @@ export default function CultivateView() {
 
   const getAvailableItems = () => {
     if (!activeCategory) return [];
-    if (['main', 'sub1', 'sub2'].includes(activeCategory)) return MOCK_INVENTORY[activeCategory === 'main' ? 'mainMethod' : 'subMethod'];
-    return MOCK_INVENTORY[activeCategory] || [];
+    if (activeCategory === 'main') return inventory.mainMethod;
+    if (['sub', 'sub1', 'sub2'].includes(activeCategory)) return inventory.subMethod;
+    return inventory[activeCategory] ?? [];
   };
 
   // 🌟 動畫判斷法訣
@@ -311,21 +327,27 @@ export default function CultivateView() {
     
     {/* 主功法 (左上方，最大) */}
     <div className="absolute top-[5%] left-[16%] scale-[1.5] z-10">
-      <FloatingIcon type="main" title="主功法" isActive={true} hideCount={true} color={auraColor} delay="0s" onClick={() => handleBrowseLibrary('main')} />
+      <FloatingIcon type="main" isActive={true} hideCount={true} color={auraColor} delay="0s" onClick={() => handleBrowseLibrary('main')} />
     </div>
 
     {/* 副功法 (右方偏中，次大) */}
     <div className="absolute top-[25%] right-[15%] scale-[1.3] z-10">
-      <FloatingIcon type="sub" title="副功法" isActive={true} hideCount={true} color={auraColor} delay="0.8s" onClick={() => handleBrowseLibrary('sub')} />
+      <FloatingIcon type="sub" isActive={true} hideCount={true} color={auraColor} delay="0.8s" onClick={() => handleBrowseLibrary('sub')} />
     </div>
 
     {/* 陣法 (左方偏下，次大) */}
     <div className="absolute bottom-[10%] left-[45%] -translate-x-1/2 scale-[1.4] z-10">
-      <FloatingIcon type="formation" title="陣法" isActive={true} hideCount={true} color={auraColor} delay="1.5s" onClick={() => handleBrowseLibrary('formation')} />
+      <FloatingIcon type="formation" isActive={true} hideCount={true} color={auraColor} delay="1.5s" onClick={() => handleBrowseLibrary('formation')} />
     </div>
 
   </div>
-
+{/* 🌟 新增：與 BagView 一致的底部神識提示 */}
+            <div 
+              className="absolute bottom-[calc(env(safe-area-inset-bottom,20px)+2cqw)] w-full text-center tracking-[0.5em] text-[12px] opacity-40 pointer-events-none"
+              style={{ color: auraColor }}
+            >
+              推演萬法以禦敵
+            </div>
   
 </div>
 

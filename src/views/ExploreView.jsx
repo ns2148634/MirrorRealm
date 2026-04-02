@@ -1,5 +1,5 @@
 // src/views/ExploreView.jsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import useGameStore from '../store/gameStore';
 
 // 戰鬥日誌各行類型對應顏色
@@ -44,14 +44,21 @@ export default function ExploreView() {
   const pressTimer = useRef(null);
   const pressStartTime = useRef(null);
 
+  // 離開頁面時重置調息狀態，避免 isMeditating 卡在 true
+  useEffect(() => {
+    return () => { setMeditating(false); };
+  }, []);
+
   const handlePointerDown = (e) => {
     e.preventDefault();
     if (isScanning || activeModal) return;
-    // 定神調息中：短按可解除
-    if (isMeditating) return;
+    // 無論是否調息中都先記錄按下時間，讓 PointerUp 能判斷短按
     pressStartTime.current = Date.now();
     setIsPressing(true);
     if (navigator.vibrate) navigator.vibrate(10);
+
+    // 定神調息中：短按可解除，不啟動長按計時器
+    if (isMeditating) return;
 
     pressTimer.current = setTimeout(() => {
       setIsPressing(false);
