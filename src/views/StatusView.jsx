@@ -105,15 +105,14 @@ export default function StatusView() {
 
   const currentRealm = realmTemplates.find((r) => r.level === realmLevel);
   const nextRealm    = realmTemplates.find((r) => r.level === realmLevel + 1);
-  const realmName    = currentRealm?.name ?? `境界 ${realmLevel}`;
-  const aura         = player.aura     ?? 0;
-  const maxAura      = player.max_aura ?? 120;
+  const realmName    = player.realm_name ?? `境界 ${realmLevel}`;
+  const mind         = player.mind      ?? 0;
 
-  // 突破條件：需有下一境界，且靈氣達到當前境界的 required_aura
-  const requiredAura = currentRealm?.required_aura ?? maxAura;
-  const canBreak     = !!nextRealm && aura >= requiredAura;
+  // 突破條件：需有下一境界，且修為達到該境界的 required_exp
+  const requiredExp = currentRealm?.required_exp ?? Infinity;
+  const canBreak    = !!nextRealm && mind >= requiredExp;
   // 已到頂：模板已載入且確實沒有下一境界
-  const isMaxRealm   = realmTemplates.length > 0 && !nextRealm;
+  const isMaxRealm  = realmTemplates.length > 0 && !nextRealm;
 
   // ── 境界突破 ────────────────────────────────────────────────────
   const handleBreakthrough = async () => {
@@ -238,7 +237,7 @@ export default function StatusView() {
         </div>
       ) : (
         <div className="text-[clamp(11px,3.5cqw,14px)] text-white/80 tracking-[0.2em] font-serif text-center shrink-0 mb-[3vh]">
-          周天靈氣 {aura} / {isMaxRealm ? maxAura : requiredAura}
+          修為 {mind} / {isMaxRealm ? mind : requiredExp}
           {isMaxRealm && <span className="ml-2 text-[#FFD700]/60">（已臻巔峰）</span>}
         </div>
       )}

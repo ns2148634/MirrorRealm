@@ -12,7 +12,7 @@ const router = express.Router();
 router.get('/realms', async (req, res) => {
     try {
         const result = await db.query(
-            `SELECT level, realm_name AS name, required_aura
+            `SELECT level, name, required_exp
              FROM realm_templates
              ORDER BY level ASC`
         );

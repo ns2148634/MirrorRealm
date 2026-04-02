@@ -1,13 +1,45 @@
 /**
- * AuthScreen.jsx — 《鏡界》無密碼登入 + 創角
+ * AuthScreen.jsx — 《鏡界》星斗連線動畫 + 無密碼登入 + 創角
  *
  * Phase 狀態機：
- * 'login'  → 登入 UI
- * 'create' → 創角 UI（gameStage === 'naming' 時切入）
+ *   'waiting'  → 等 document.fonts.ready
+ *   'stars'    → 隨機星斗逐點亮起、逐線連接（~4s）
+ *   'login'    → 星圖上浮淡出，標題 + 登入 UI 從下淡入
+ *   'create'   → 創角 UI
  */
 import { useState, useEffect } from 'react';
 import useGameStore from '../store/gameStore';
-import RealmBackground from '../components/RealmBackground';
+
+// ── 星座資料（viewBox 0 0 320 220）───────────────────────────────
+const STARS = [
+  { x: 30,  y: 165 },
+  { x: 88,  y: 134 },
+  { x: 146, y: 128 },
+  { x: 175, y: 152 },
+  { x: 218, y: 120 },
+  { x: 256, y: 82  },
+  { x: 296, y: 54  },
+];
+const EDGES = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]];
+
+// ── 時序常數 ──────────────────────────────────────────────────────
+const BEAT     = 0.48;
+const STAR_DUR = 0.50;
+const LINE_DUR = 0.42;
+const LINE_LAG = 0.28;
+const STARS_TO_LOGIN_MS = Math.round(
+  ((STARS.length - 1) * BEAT + STAR_DUR + 0.8) * 1000
+); // ≈ 4200ms
+
+// ── 背景散星（固定偽隨機）────────────────────────────────────────
+const BG_STARS = Array.from({ length: 48 }, (_, i) => ({
+  cx:  ((i * 47 + 13) % 100).toFixed(1),
+  cy:  ((i * 31 + 7)  % 100).toFixed(1),
+  r:   i % 5 === 0 ? 1.3 : 0.65,
+  op:  (0.10 + (i % 6) * 0.06).toFixed(2),
+  dur: (2.4 + (i % 5) * 0.7).toFixed(1),
+  del: ((i % 7) * 0.45).toFixed(2),
+}));
 
 const GENDERS = [
   { value: '男',   label: '乾（男）' },
@@ -17,13 +49,23 @@ const GENDERS = [
 
 // ── CSS ───────────────────────────────────────────────────────────
 const ANIM_CSS = `
-  /* 登入/創角 UI 淡入上浮 */
+  @keyframes twinkle {
+    0%, 100% { opacity: var(--op); }
+    50%       { opacity: calc(var(--op) * 0.25); }
+  }
+  @keyframes star-pop {
+    0%   { opacity: 0; transform: scale(0.05); }
+    60%  { opacity: 1; transform: scale(1.45); }
+    100% { opacity: 1; transform: scale(1);    }
+  }
+  @keyframes line-draw {
+    from { stroke-dashoffset: 300; }
+    to   { stroke-dashoffset: 0;   }
+  }
   @keyframes ui-in {
     from { opacity: 0; transform: translateY(22px); }
     to   { opacity: 1; transform: translateY(0);    }
   }
-
-  /* 輸入框 */
   .mir-input {
     width: 100%;
     padding: clamp(8px,3vw,12px) clamp(10px,4vw,16px);
@@ -39,8 +81,6 @@ const ANIM_CSS = `
   }
   .mir-input:focus { border-color: rgba(0,229,255,.5); }
   .mir-input::placeholder { color: rgba(120,130,145,.8); }
-
-  /* 按鈕基底 */
   .mir-btn {
     width: 100%;
     padding: clamp(8px,3vw,12px) 0;
@@ -52,7 +92,6 @@ const ANIM_CSS = `
     transition: background .2s, border-color .2s, opacity .2s;
   }
   .mir-btn:disabled { opacity: .45; cursor: default; }
-
   .mir-btn-primary {
     background: rgba(0,60,80,.55);
     border: 1px solid rgba(0,229,255,.4);
@@ -73,7 +112,7 @@ const ANIM_CSS = `
 
 // ─────────────────────────────────────────────────────────────────
 export default function AuthScreen() {
-  const [phase,        setPhase]        = useState('login');
+  const [phase,        setPhase]        = useState('waiting');
   const [otpStep,      setOtpStep]      = useState('email');
   const [email,        setEmail]        = useState('');
   const [code,         setCode]         = useState('');
@@ -90,7 +129,19 @@ export default function AuthScreen() {
   const verifyOtp       = useGameStore(s => s.verifyOtp);
   const createCharacter = useGameStore(s => s.createCharacter);
 
-  // ── gameStage 變為 naming 時切入創角介面 ────────────────────────
+  // ── 字體載入完成後啟動星座動畫 ──────────────────────────────────
+  useEffect(() => {
+    document.fonts.ready.then(() => setPhase('stars'));
+  }, []);
+
+  // ── 星座動畫結束後切換至 login ───────────────────────────────────
+  useEffect(() => {
+    if (phase !== 'stars') return;
+    const t = setTimeout(() => setPhase('login'), STARS_TO_LOGIN_MS);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  // ── gameStage 變為 naming 時切入創角介面（任何 phase 都接受）───
   useEffect(() => {
     if (gameStage === 'naming') setPhase('create');
   }, [gameStage]);
@@ -99,7 +150,7 @@ export default function AuthScreen() {
   useEffect(() => {
     const handler = (e) => { e.preventDefault(); setInstallEvent(e); };
     window.addEventListener('beforeinstallprompt', handler);
-    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+    const isIos        = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches
       || window.navigator.standalone;
     if (isIos && !isStandalone) setShowIosHint(true);
@@ -139,27 +190,121 @@ export default function AuthScreen() {
     if (!r.success) setMessage(r.error ?? '創角失敗，請稍後再試');
   };
 
+  const isLoginPhase      = phase === 'login' || phase === 'create';
+  const showConstellation = phase !== 'create';
+
   // ─────────────────────────────────────────────────────────────
   return (
-    <div className="absolute inset-0 overflow-hidden flex flex-col items-center justify-center gap-6">
+    <div
+      className="absolute inset-0 overflow-hidden flex flex-col items-center justify-center gap-6"
+      style={{
+        background: [
+          'radial-gradient(ellipse 90% 70% at 50% 35%, #040d1a 0%, transparent 70%)',
+          'linear-gradient(180deg, #030810 0%, #010306 100%)',
+        ].join(', '),
+      }}
+    >
       <style>{ANIM_CSS}</style>
 
-      {/* ── 境界背景 ── */}
-      <RealmBackground />
+      {/* ── 背景散星 ── */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
+        {BG_STARS.map((s, i) => (
+          <circle
+            key={i}
+            cx={`${s.cx}%`} cy={`${s.cy}%`} r={s.r}
+            fill="white"
+            style={{
+              '--op': s.op,
+              opacity: s.op,
+              animation: `twinkle ${s.dur}s ease-in-out ${s.del}s infinite`,
+            }}
+          />
+        ))}
+      </svg>
+
+      {/* ── 星座 SVG ── */}
+      {showConstellation && (
+        <div
+          style={{
+            flexShrink: 0,
+            transition: 'transform 1.1s cubic-bezier(0.4,0,0.2,1), opacity 1.1s ease',
+            transform:  isLoginPhase ? 'translateY(-6vh)' : 'translateY(0)',
+            opacity:    isLoginPhase ? 0.22 : 1,
+          }}
+        >
+          <svg
+            viewBox="0 0 320 220"
+            style={{ width: 'min(88vw, 340px)', display: 'block', overflow: 'visible' }}
+            aria-hidden="true"
+          >
+            <defs>
+              <filter id="sg" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            {/* 連線 */}
+            {EDGES.map(([a, b], i) => {
+              const delay = (i * BEAT + LINE_LAG).toFixed(2);
+              return (
+                <line
+                  key={`l${i}`}
+                  x1={STARS[a].x} y1={STARS[a].y}
+                  x2={STARS[b].x} y2={STARS[b].y}
+                  stroke="rgba(0,229,255,0.50)"
+                  strokeWidth="1"
+                  strokeLinecap="round"
+                  strokeDasharray={300}
+                  style={{
+                    strokeDashoffset: phase === 'waiting' ? 300 : undefined,
+                    animation: phase !== 'waiting'
+                      ? `line-draw ${LINE_DUR}s ease-out ${delay}s both`
+                      : 'none',
+                  }}
+                />
+              );
+            })}
+
+            {/* 星點 */}
+            {STARS.map((s, i) => {
+              const delay = (i * BEAT).toFixed(2);
+              return (
+                <g
+                  key={`s${i}`}
+                  filter="url(#sg)"
+                  style={{
+                    transformOrigin: `${s.x}px ${s.y}px`,
+                    animation: phase !== 'waiting'
+                      ? `star-pop ${STAR_DUR}s cubic-bezier(.34,1.56,.64,1) ${delay}s both`
+                      : 'none',
+                    opacity: phase === 'waiting' ? 0 : undefined,
+                  }}
+                >
+                  <circle cx={s.x} cy={s.y} r={7}   fill="rgba(0,229,255,0.12)" />
+                  <circle cx={s.x} cy={s.y} r={3.8}  fill="#00E5FF" />
+                  <circle cx={s.x} cy={s.y} r={1.4}  fill="rgba(255,255,255,0.95)" />
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
 
       {/* ── 登入 UI ── */}
       {phase === 'login' && (
         <div
           style={{
-            animation: 'ui-in 0.9s ease both',
+            animation: 'ui-in 0.9s ease 0.1s both',
             width: '100%', maxWidth: 420,
             padding: '0 9vw',
             display: 'flex', flexDirection: 'column', gap: '3.5vw',
             flexShrink: 0,
-            position: 'relative', zIndex: 10,
           }}
         >
-          {/* 標題 */}
           <div style={{ textAlign: 'center', marginBottom: '1vw' }}>
             <h1 style={{
               fontFamily: "'Ma Shan Zheng', serif",
@@ -182,12 +327,10 @@ export default function AuthScreen() {
             </p>
           </div>
 
-          {/* Google 一鍵 */}
           <button className="mir-btn mir-btn-primary" onClick={handleGoogleLogin} disabled={isLoading}>
             {isLoading ? '連接天道中…' : '【天道之力】　Google 一鍵踏入仙途'}
           </button>
 
-          {/* 分隔線 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '3vw' }}>
             <div style={{ flex: 1, height: 1, background: 'rgba(0,229,255,0.15)' }} />
             <span style={{
@@ -201,7 +344,6 @@ export default function AuthScreen() {
             <div style={{ flex: 1, height: 1, background: 'rgba(0,229,255,0.15)' }} />
           </div>
 
-          {/* OTP — Email 步驟 */}
           {otpStep === 'email' && (
             <>
               <input
@@ -218,7 +360,6 @@ export default function AuthScreen() {
             </>
           )}
 
-          {/* OTP — 驗證碼步驟 */}
           {otpStep === 'code' && (
             <>
               <p style={{
@@ -257,7 +398,6 @@ export default function AuthScreen() {
             </>
           )}
 
-          {/* 訊息 */}
           {message && (
             <p style={{
               fontFamily: "'Kaiti', serif", textAlign: 'center',
@@ -267,7 +407,6 @@ export default function AuthScreen() {
             </p>
           )}
 
-          {/* ── PWA 安裝提示 ── */}
           {installEvent && (
             <button
               className="mir-btn mir-btn-secondary"
@@ -304,7 +443,6 @@ export default function AuthScreen() {
             padding: '0 9vw',
             display: 'flex', flexDirection: 'column', gap: '4vw',
             flexShrink: 0,
-            position: 'relative', zIndex: 10,
           }}
         >
           <div style={{ textAlign: 'center', marginBottom: '1vw' }}>
@@ -329,7 +467,6 @@ export default function AuthScreen() {
             </p>
           </div>
 
-          {/* 道號 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2vw' }}>
             <label style={{ fontFamily: "'Kaiti', serif", color: 'rgba(148,163,184,0.85)', fontSize: 'clamp(12px,3.5vw,14px)' }}>
               道號（2–6 字）
@@ -342,7 +479,6 @@ export default function AuthScreen() {
             />
           </div>
 
-          {/* 根骨（性別） */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2vw' }}>
             <label style={{ fontFamily: "'Kaiti', serif", color: 'rgba(148,163,184,0.85)', fontSize: 'clamp(12px,3.5vw,14px)' }}>
               根骨（性別）

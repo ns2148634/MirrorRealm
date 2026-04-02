@@ -124,7 +124,10 @@ export async function useItem(playerId, itemId) {
 // ── 取得玩家狀態（含離線回復計算）─────────────────────────────
 export async function getPlayerStatus(playerId) {
     const result = await db.query(
-        `SELECT * FROM players WHERE id = $1`,
+        `SELECT p.*, rt.name AS realm_name
+         FROM players p
+         LEFT JOIN realm_templates rt ON rt.level = p.realm_level
+         WHERE p.id = $1`,
         [playerId]
     );
     if (result.rows.length === 0) throw new Error('找不到道友的命格');
