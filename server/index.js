@@ -2,9 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import lbsRoutes from './routes/lbsRoutes.js';
+import lbsRoutes    from './routes/lbsRoutes.js';
 import playerRoutes from './routes/playerRoutes.js';
-import authRoutes from './routes/authRoutes.js';
+import authRoutes   from './routes/authRoutes.js';
+import configRoutes from './routes/configRoutes.js';
 
 // ESM 環境下沒有 __dirname，需手動重建
 const __filename = fileURLToPath(import.meta.url);
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use('/api/auth',   authRoutes);
 app.use('/api/lbs',    lbsRoutes);
 app.use('/api/player', playerRoutes);
+app.use('/api/config', configRoutes);
 
 // ── 靜態資源（Vite 打包產物）────────────────────────────────
 // dist 資料夾位於專案根目錄，server/ 目錄往上一層

@@ -1,71 +1,16 @@
 // src/views/StatusView.jsx
-import React, { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import useGameStore from '../store/gameStore';
 
-// 境界等級 → 名稱對照（與 realm_templates 一致）
-const REALM_NAMES = {
-  1: '凡人',
-  2: '練氣一層',
-  3: '練氣二層',
-  4: '練氣三層',
-  5: '築基初期',
-};
-
-// 升至下一境界所需的「累計」修為門檻（與 realm_templates.required_exp 一致）
-const REALM_EXP_REQUIRED = {
-  1: 100,
-  2: 300,
-  3: 600,
-  4: 1200,
-  5: null, // 已是最高境界
-};
-
-const EQUIP_SLOTS = [
-  { slot: 'weapon',  label: '武器' },
-  { slot: 'armor',   label: '防具' },
-  { slot: 'trinket', label: '飾品' },
-];
-
 export default function StatusView() {
-  const player    = useGameStore((s) => s.player);
-  const setPlayer = useGameStore((s) => s.setPlayer);
-  const canvasRef = useRef(null);
+  const player         = useGameStore((s) => s.player);
+  const realmTemplates = useGameStore((s) => s.realmTemplates);
+  const setPlayer      = useGameStore((s) => s.setPlayer);
+  const canvasRef      = useRef(null);
 
-  const [isBreaking,    setIsBreaking]    = useState(false);
-  const [breakMessage,  setBreakMessage]  = useState('');
-  const [showFlash,     setShowFlash]     = useState(false);
-  const [equipment,     setEquipment]     = useState([]);
-  const [isUnequipping, setIsUnequipping] = useState(false);
-
-  const fetchEquipment = async (id) => {
-    if (!id) return;
-    try {
-      const res    = await fetch(`/api/player/equipment/${id}`);
-      const result = await res.json();
-      if (result.status === 'success') setEquipment(result.data);
-    } catch {}
-  };
-
-  useEffect(() => { fetchEquipment(player?.id); }, [player?.id]);
-
-  const handleUnequip = async (slot) => {
-    if (!player?.id || isUnequipping) return;
-    setIsUnequipping(true);
-    try {
-      const res    = await fetch('/api/player/unequip', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ playerId: player.id, slot }),
-      });
-      const result = await res.json();
-      if (res.ok) {
-        setEquipment((prev) => prev.filter((e) => e.slot !== slot));
-        setPlayer({ attack: result.data.attack, defense: result.data.defense });
-      }
-    } catch {} finally {
-      setIsUnequipping(false);
-    }
-  };
+  const [isBreaking,   setIsBreaking]   = useState(false);
+  const [breakMessage, setBreakMessage] = useState('');
+  const [showFlash,    setShowFlash]    = useState(false);
 
   // ── 陣盤動畫 ────────────────────────────────────────────────
   useEffect(() => {
@@ -147,12 +92,17 @@ export default function StatusView() {
 
   if (!player) return null;
 
-  // ── 境界計算 ────────────────────────────────────────────────
-  const realmLevel  = player.realm_level ?? 1;
-  const realmName   = REALM_NAMES[realmLevel] ?? `境界 ${realmLevel}`;
-  const aura        = player.aura     ?? 0;
-  const maxAura     = player.max_aura ?? 120;
-  const canBreak    = aura >= maxAura;
+  // ── 境界動態計算（依 realmTemplates）────────────────────────
+  const realmLevel   = player.realm_level ?? 1;
+  const currentRealm = realmTemplates.find((r) => r.level === realmLevel);
+  const nextRealm    = realmTemplates.find((r) => r.level === realmLevel + 1);
+  const realmName    = currentRealm?.name ?? `境界 ${realmLevel}`;
+  const aura         = player.aura     ?? 0;
+  const maxAura      = player.max_aura ?? 120;
+
+  // 突破條件：需有下一境界，且靈氣達到當前境界的 required_aura
+  const requiredAura = currentRealm?.required_aura ?? maxAura;
+  const canBreak     = !!nextRealm && aura >= requiredAura;
 
   // ── 境界突破 ────────────────────────────────────────────────
   const handleBreakthrough = async () => {
@@ -174,7 +124,7 @@ export default function StatusView() {
         setShowFlash(true);
         setTimeout(() => setShowFlash(false), 800);
         setBreakMessage(result.data.message);
-        setPlayer(result.data); // 同步更新 Zustand store
+        setPlayer(result.data);
       }
     } catch {
       setBreakMessage('突破失敗，天地靈氣紊亂');
@@ -183,8 +133,19 @@ export default function StatusView() {
     }
   };
 
-  const getGoodTitle = (karma) => (karma > 500 ? '名震一方' : '默默無聞');
-  const getEvilTitle = (karma) => (karma > 100 ? '殺戮成性' : '心如止水');
+  // ── 聲望 / 煞氣 稱號 ────────────────────────────────────────
+  const getGoodTitle = (karma) => {
+    if ((karma ?? 0) > 1000) return '名動天下';
+    if ((karma ?? 0) > 500)  return '名震一方';
+    if ((karma ?? 0) > 100)  return '行俠仗義';
+    return '默默無聞';
+  };
+  const getEvilTitle = (karma) => {
+    if ((karma ?? 0) > 500)  return '血債累累';
+    if ((karma ?? 0) > 100)  return '殺戮成性';
+    if ((karma ?? 0) > 0)    return '略有煞氣';
+    return '清淨無垢';
+  };
 
   return (
     <div className="h-full w-full relative bg-transparent overflow-y-auto flex flex-col items-center pt-[4vh] pb-[calc(env(safe-area-inset-bottom,20px)+8vh)]">
@@ -219,64 +180,69 @@ export default function StatusView() {
           </button>
         </div>
       ) : (
-        <div className="text-[clamp(13px,3.8cqw,16px)] text-white/80 tracking-[0.2em] font-serif text-center shrink-0 mb-3">
-          周天靈氣 <span className="text-[#00E5FF] font-mono">{player.aura ?? 0}</span>
-          /{player.max_aura ?? 120}
+        <div className="text-[clamp(11px,3.5cqw,14px)] text-white/80 tracking-[0.2em] font-serif text-center shrink-0 mb-[3vh]">
+          周天靈氣 {aura} / {nextRealm ? requiredAura : maxAura}
+          {!nextRealm && <span className="ml-2 text-[#FFD700]/60">（已臻巔峰）</span>}
         </div>
       )}
 
-      {/* ── 命格資訊區 ───────────────────────────────────── */}
-      <div className="flex flex-row justify-center items-start gap-[8cqw] px-[8cqw] w-full max-w-[400px] shrink-0 z-10 mb-4">
+      {/* ── 命格資訊區 ──────────────────────────────────────────── */}
+      <div className="flex flex-row justify-center items-start gap-[8cqw] px-[8cqw] w-full max-w-[360px] shrink-0 z-10 mb-4">
 
         {/* 左：道號垂排 */}
         <div
-          className="text-[clamp(28px,9cqw,40px)] text-white tracking-[0.3em] font-serif leading-none shrink-0"
-          style={{ writingMode: 'vertical-rl', textOrientation: 'upright', textShadow: '0 0 10px rgba(255,255,255,0.4)' }}
+          className="text-[clamp(32px,10cqw,42px)] text-white/95 tracking-[0.2em] font-serif leading-tight shrink-0 mt-2"
+          style={{ writingMode: 'vertical-rl', textOrientation: 'upright', textShadow: '0 0 10px rgba(255,255,255,0.2)' }}
         >
           {player.name ?? '無名散修'}
         </div>
 
         {/* 右：數值列表 */}
-        <div className="flex flex-col flex-grow text-[clamp(14px,4cqw,18px)] text-white tracking-[0.15em] font-serif pt-1 gap-[2cqw]">
+        <div className="flex flex-col flex-grow text-white/90 tracking-[0.2em] font-serif gap-[1.5vh]">
 
           {/* 境界名稱 */}
-          <div className="font-bold text-[#FFD700]" style={{ textShadow: '0 0 8px rgba(255,215,0,0.5)' }}>
+          <div className="text-[clamp(18px,5.5cqw,22px)] mb-1 drop-shadow-md">
             {realmName}
           </div>
 
           {/* 屬性列 */}
           {[
-            { label: '壽元',  value: `${player.age ?? 18} 歲` },
-            { label: '氣血',  value: `${player.hp ?? 0} / ${player.max_hp ?? 100}` },
-            { label: '體力',  value: `${player.sp ?? 0} / ${player.max_sp ?? 100}` },
+            { label: '壽元', value: `${player.age ?? 0}/${player.max_age ?? 0}` },
+            { label: '靈力', value: `${player.mp ?? 0}/${player.max_mp ?? 0}` },
+            { label: '神識', value: `${player.god_sense ?? 0}/${player.max_god_sense ?? 0}` },
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between items-end w-full">
-              <span className="opacity-60 text-[13px]">{label}</span>
-              <span className="font-mono text-[clamp(14px,4.5cqw,18px)]">{value}</span>
+              <span className="opacity-80 text-[clamp(15px,4.5cqw,18px)] tracking-[0.4em]">{label}</span>
+              <span className="font-mono text-[clamp(16px,5cqw,20px)] tracking-wider drop-shadow-sm">{value}</span>
             </div>
           ))}
 
+          <div className="w-full h-[1px] bg-white/5 my-1" />
+
           {/* 聲望 / 煞氣 */}
           <div className="flex justify-between items-end w-full">
-            <span className="opacity-60 text-[13px]">聲望</span>
-            <span className="text-[12px] text-[#00E5FF] tracking-[0.3em]">{getGoodTitle(player.karma_good)}</span>
+            <span className="opacity-80 text-[clamp(15px,4.5cqw,18px)] tracking-[0.4em]">聲望</span>
+            <span className="text-[14px] text-white/60 tracking-[0.3em] font-serif drop-shadow-sm">
+              {getGoodTitle(player.karma_good)}
+            </span>
           </div>
           <div className="flex justify-between items-end w-full">
-            <span className="opacity-60 text-[13px]">煞氣</span>
-            <span className="text-[12px] text-[#FF3B30] tracking-[0.3em]">{getEvilTitle(player.karma_evil)}</span>
+            <span className="opacity-80 text-[clamp(15px,4.5cqw,18px)] tracking-[0.4em]">煞氣</span>
+            <span className="text-[14px] text-white/60 tracking-[0.3em] font-serif drop-shadow-sm">
+              {getEvilTitle(player.karma_evil)}
+            </span>
           </div>
         </div>
       </div>
 
       {/* 突破結果訊息 */}
       {breakMessage !== '' && (
-        <p className={`shrink-0 text-center text-[13px] tracking-wider leading-relaxed px-6
+        <p className={`shrink-0 text-center text-[13px] tracking-wider leading-relaxed px-6 mt-4
           ${breakMessage.includes('成功') ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>
           {breakMessage}
         </p>
       )}
 
-      {/* 按鈕發光動畫 keyframes */}
       <style>{`
         @keyframes pulse-gold {
           0%, 100% { box-shadow: 0 0 20px rgba(255,215,0,0.3), inset 0 0 10px rgba(255,215,0,0.05); }

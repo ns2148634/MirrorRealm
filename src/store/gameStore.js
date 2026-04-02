@@ -12,9 +12,10 @@ const REGEN_PER_MIN = { hp: 1, sp: 1, ep: 1, aura: 1 };
 const acc = { hp: 0, sp: 0, ep: 0, aura: 0 };
 
 const useGameStore = create((set, get) => ({
-  gameStage: 'login',   // 'login' | 'naming' | 'playing'
-  player:    null,
-  isLoading: false,
+  gameStage:      'login',   // 'login' | 'naming' | 'playing'
+  player:         null,
+  isLoading:      false,
+  realmTemplates: [],
 
   // ── 啟動時：檢查 Supabase session，並監聽 Auth 事件 ──────────
   checkAuthAndPlayer: () => {
@@ -54,6 +55,7 @@ const useGameStore = create((set, get) => ({
       } else {
         // 已有角色 → 直接進入遊戲
         set({ player: result.player, gameStage: 'playing', isLoading: false });
+        get().fetchGameConfigs();
       }
     } catch (err) {
       console.error('[store] syncPlayerWithBackend 失敗:', err);
@@ -117,10 +119,22 @@ const useGameStore = create((set, get) => ({
       }
 
       set({ player: result.player, gameStage: 'playing', isLoading: false });
+      get().fetchGameConfigs();
       return { success: true };
     } catch (err) {
       set({ isLoading: false });
       return { success: false, error: err.message };
+    }
+  },
+
+  // ── 讀取遊戲設定（境界模板等）───────────────────────────────
+  fetchGameConfigs: async () => {
+    try {
+      const res    = await fetch('/api/config/realms');
+      const result = await res.json();
+      if (res.ok) set({ realmTemplates: result.data });
+    } catch (err) {
+      console.error('[store] fetchGameConfigs 失敗:', err);
     }
   },
 

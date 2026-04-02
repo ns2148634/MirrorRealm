@@ -36,8 +36,7 @@ export default function ExploreView() {
   const [terrains, setTerrains] = useState([]); 
   const [message, setMessage] = useState('凝神聚氣，外放神識');
 
-  // 👉 新增：控制彈出視窗的狀態
-  // step 可以是 'info' (確認資訊), 'loading' (連線中), 'result' (結算)
+  // 控制彈出視窗的狀態
   const [activeModal, setActiveModal] = useState(null); 
 
   const pressTimer = useRef(null);
@@ -61,7 +60,6 @@ export default function ExploreView() {
         return;
       }
 
-      // 進入調息 → 呼叫後端 API
       if (!player?.id) {
         setMessage('尚未感知到道友的命格');
         setIsTuning(false);
@@ -110,20 +108,13 @@ export default function ExploreView() {
     }
   };
 
-  // 👉 改動一：點擊地圖光點時，先不打 API，而是打開「確認視窗」
   const openNodeModal = (clickedNode) => {
-    setActiveModal({
-        step: 'info',
-        node: clickedNode
-    });
+    setActiveModal({ step: 'info', node: clickedNode });
   };
 
-  // 👉 改動二：玩家在視窗點擊「確認探索」後，才真正呼叫 API
   const confirmExecuteNode = async () => {
     if (!player?.id || !activeModal?.node) return;
-    
     try {
-      // 進入 loading 狀態，避免玩家重複點擊
       setActiveModal(prev => ({ ...prev, step: 'loading' }));
 
       const res = await fetch('/api/lbs/execute', {
@@ -140,11 +131,10 @@ export default function ExploreView() {
 
       if (!res.ok) {
         setMessage(result.message || '互動失敗，天地法則紊亂');
-        setActiveModal(null); // 關閉視窗
+        setActiveModal(null);
         return;
       }
 
-      // 互動成功，進入 result 結算狀態，並把後端傳來的訊息存起來
       setActiveModal(prev => ({
           ...prev,
           step:          'result',
@@ -155,19 +145,15 @@ export default function ExploreView() {
           expGained:     result.data.exp_gained  ?? 0,
       }));
       
-      // 將被點擊的節點從背景的雷達畫面上移除
       setEvents(prevEvents => prevEvents.filter(e => e.id !== activeModal.node.id));
-      
       if (navigator.vibrate) navigator.vibrate([50, 50, 100]); 
 
     } catch (error) {
-      console.error('互動連線錯誤', error);
       setMessage('天地法則紊亂，無法互動');
       setActiveModal(null);
     }
   };
 
-  // 關閉視窗的方法
   const closeModal = () => {
       setActiveModal(null);
   };
@@ -232,10 +218,7 @@ export default function ExploreView() {
           });
 
           setEvents(newEvents);
-          setTerrains([
-             { id: 't1', ...TERRAIN_MAPPING['water'], top: '30%', left: '70%' },
-          ]); 
-          
+          setTerrains([{ id: 't1', ...TERRAIN_MAPPING['water'], top: '30%', left: '70%' }]); 
           setIsScanning(false);
           setMessage(`探尋完畢，發現 ${newEvents.length} 處靈力波動`);
           if (reduceEp) reduceEp(10);
@@ -262,7 +245,17 @@ export default function ExploreView() {
 
   return (
     <div className="h-full w-full relative flex items-center justify-center overflow-hidden bg-transparent">      
-      <style>{/* ... 保留你原本的 style 動畫 ... */}</style>
+      {/* 🌟 核心修復：被 AI 刪除的動畫樣式補回 */}
+      <style>{`
+        @keyframes ripple-out {
+          0% { transform: scale(0.5); opacity: 0.8; }
+          100% { transform: scale(3.5); opacity: 0; }
+        }
+        @keyframes ripple-in {
+          0% { transform: scale(3.5); opacity: 0; }
+          100% { transform: scale(0.5); opacity: 0.8; }
+        }
+      `}</style>
 
       {/* 1. 底層風水地形光暈 */}
       <div className="absolute inset-0 pointer-events-none z-0">
@@ -274,7 +267,7 @@ export default function ExploreView() {
       {/* 2. 掃描到的事件節點 */}
       {events.map((ev) => (
         <div key={ev.id} className="absolute flex flex-col items-center justify-center cursor-pointer group z-20 animate-[bounce-subtle_2s_infinite]" style={{ top: ev.top, left: ev.left }}
-          onClick={(e) => { e.stopPropagation(); openNodeModal(ev); }} // 👉 改為打開彈出視窗
+          onClick={(e) => { e.stopPropagation(); openNodeModal(ev); }} 
         >
           <div className="relative flex items-center justify-center translate-y-[-50%]">
             <div className="absolute w-8 h-8 rounded-full animate-ping opacity-40" style={{ backgroundColor: ev.color }}></div>
@@ -284,11 +277,49 @@ export default function ExploreView() {
         </div>
       ))}
 
-      {/* 3. 中央探靈陣盤 (保持不變) */}
-      <div className={`relative flex flex-col items-center justify-center cursor-pointer transition-transform duration-500 z-30 ${isScanning ? 'scale-110' : isPressing ? 'scale-90' : isTuning ? 'scale-100' : 'hover:scale-105 active:scale-95'}`} onPointerDown={handlePointerDown} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onContextMenu={(e) => e.preventDefault()}>
-        {/* ... 原本的陣盤圈圈與動畫 ... */}
-        <div className={`w-[80px] h-[80px] rounded-full flex flex-col items-center justify-center transition-all duration-1000 ${isScanning || isTuning ? 'shadow-[0_0_50px_rgba(0,229,255,0.8)] bg-[#00E5FF]/30 backdrop-blur-md' : 'shadow-[0_0_20px_rgba(0,229,255,0.15)] bg-[#0A0C10]/80 backdrop-blur-sm'}`}>
-          <div className={`w-[40px] h-[40px] border-[2px] rounded-sm rotate-45 transition-colors duration-500 ${(isScanning || isTuning) ? 'border-white animate-[spin_1s_linear_infinite]' : 'border-[#00E5FF] opacity-80 animate-[pulse_3s_ease-in-out_infinite]'}`}></div>
+      {/* =====================================================================
+          🌟 核心修復：中央探靈陣盤與波紋動畫
+          ===================================================================== */}
+      <div 
+        className={`relative flex flex-col items-center justify-center cursor-pointer transition-transform duration-500 z-30 
+          ${isScanning ? 'scale-110' : isPressing ? 'scale-90' : isTuning ? 'scale-100' : 'hover:scale-105 active:scale-95'}`} 
+        onPointerDown={handlePointerDown} 
+        onPointerUp={handlePointerUp} 
+        onPointerLeave={handlePointerUp} 
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        {/* 🌟 探測時：向外擴散的青色波紋 */}
+        {isScanning && (
+          <>
+            <div className="absolute w-[80px] h-[80px] rounded-full border-[1.5px] border-[#00E5FF] animate-[ripple-out_2s_infinite_ease-out]" style={{ animationDelay: '0s' }}></div>
+            <div className="absolute w-[80px] h-[80px] rounded-full border-[1.5px] border-[#00E5FF] animate-[ripple-out_2s_infinite_ease-out]" style={{ animationDelay: '0.6s' }}></div>
+            <div className="absolute w-[80px] h-[80px] rounded-full border-[1.5px] border-[#00E5FF] animate-[ripple-out_2s_infinite_ease-out]" style={{ animationDelay: '1.2s' }}></div>
+          </>
+        )}
+
+        {/* 🌟 長按調息時：向內聚攏的金色波紋 */}
+        {(isPressing || isTuning) && (
+          <>
+            <div className="absolute w-[80px] h-[80px] rounded-full border-[2px] border-[#FFD700] animate-[ripple-in_1.5s_infinite_ease-in]" style={{ animationDelay: '0s' }}></div>
+            <div className="absolute w-[80px] h-[80px] rounded-full border-[2px] border-[#FFD700] animate-[ripple-in_1.5s_infinite_ease-in]" style={{ animationDelay: '0.5s' }}></div>
+            <div className="absolute w-[80px] h-[80px] rounded-full border-[2px] border-[#FFD700] animate-[ripple-in_1.5s_infinite_ease-in]" style={{ animationDelay: '1.0s' }}></div>
+          </>
+        )}
+
+        {/* 核心陣眼背景色變換 */}
+        <div className={`w-[80px] h-[80px] rounded-full flex flex-col items-center justify-center transition-all duration-1000 
+          ${isScanning ? 'shadow-[0_0_50px_rgba(0,229,255,0.8)] bg-[#00E5FF]/30 backdrop-blur-md' : 
+            (isPressing || isTuning) ? 'shadow-[0_0_50px_rgba(255,215,0,0.8)] bg-[#FFD700]/30 backdrop-blur-md' : 
+            'shadow-[0_0_20px_rgba(0,229,255,0.15)] bg-[#0A0C10]/80 backdrop-blur-sm'}`}
+        >
+          {/* 陣眼內部的旋轉方塊 */}
+          <div className={`w-[40px] h-[40px] border-[2px] rounded-sm transition-all duration-500 
+            ${isScanning ? 'border-white animate-[spin_1s_linear_infinite]' : 
+              (isPressing || isTuning) ? 'border-white animate-[spin_0.5s_linear_infinite_reverse] scale-75' : 
+              'border-[#00E5FF] opacity-80 animate-[spin_4s_linear_infinite]'}
+            `}
+            style={(!isScanning && !isPressing && !isTuning) ? { transform: 'rotate(45deg)' } : {}}
+          ></div>
         </div>
       </div>
 
@@ -297,18 +328,14 @@ export default function ExploreView() {
         {message}
       </div>
 
-      {/* =====================================================================
-          🌟 核心改動：互動彈出視窗 (Modal Overlay)
-          ===================================================================== */}
+      {/* 互動彈出視窗 (Modal Overlay) */}
       {activeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
           <div className="bg-[#12141A] border border-[#00E5FF]/30 rounded-xl w-full max-w-[320px] shadow-[0_0_40px_rgba(0,229,255,0.15)] flex flex-col overflow-hidden text-center transform transition-all">
             
-            {/* 視窗頭部裝飾 */}
             <div className="h-1 w-full bg-gradient-to-r from-transparent via-[#00E5FF] to-transparent opacity-50"></div>
 
             <div className="p-6">
-              {/* 狀態一：確認資訊 */}
               {activeModal.step === 'info' && (
                 <>
                   <h3 className="text-[#00E5FF] text-xl mb-2 font-bold tracking-widest">{activeModal.node.name}</h3>
@@ -333,7 +360,6 @@ export default function ExploreView() {
                 </>
               )}
 
-              {/* 狀態二：連線互動中 */}
               {activeModal.step === 'loading' && (
                 <div className="py-8 flex flex-col items-center justify-center">
                   <div className="w-8 h-8 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -341,18 +367,13 @@ export default function ExploreView() {
                 </div>
               )}
 
-              {/* 狀態三：結算畫面 */}
               {activeModal.step === 'result' && (
                 <>
-                  {/* ── 戰鬥結果：顯示完整日誌 ── */}
                   {activeModal.battleLog ? (
                     <>
-                      {/* 標題 */}
                       <h3 className={`text-xl mb-3 font-bold tracking-widest ${activeModal.outcome === 'win' ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>
                         {activeModal.outcome === 'win' ? '⚔ 勝利' : '💀 重傷'}
                       </h3>
-
-                      {/* 日誌捲軸區 */}
                       <div className="bg-black/60 border border-white/10 rounded-lg p-3 mb-4 max-h-[220px] overflow-y-auto text-left space-y-1 font-mono text-[11px] leading-relaxed">
                         {activeModal.battleLog.map((entry, i) => (
                           <p key={i} style={{ color: LOG_LINE_COLOR[entry.type] ?? '#9CA3AF' }}>
@@ -360,30 +381,18 @@ export default function ExploreView() {
                           </p>
                         ))}
                       </div>
-
-                      {/* 戰利品摘要 */}
                       <div className="bg-black/40 rounded p-3 mb-4 border border-white/5 text-xs space-y-1">
-                        {activeModal.expGained > 0 && (
-                          <p className="text-[#32D74B] tracking-widest">修為 +{activeModal.expGained}</p>
-                        )}
-                        {activeModal.itemDropped && (
-                          <p className="text-[#FFD700] tracking-widest">獲得【{activeModal.itemDropped}】×1</p>
-                        )}
-                        {!activeModal.itemDropped && activeModal.outcome === 'win' && (
-                          <p className="text-white/30 tracking-widest">此番未有掉落</p>
-                        )}
+                        {activeModal.expGained > 0 && <p className="text-[#32D74B] tracking-widest">修為 +{activeModal.expGained}</p>}
+                        {activeModal.itemDropped && <p className="text-[#FFD700] tracking-widest">獲得【{activeModal.itemDropped}】×1</p>}
+                        {!activeModal.itemDropped && activeModal.outcome === 'win' && <p className="text-white/30 tracking-widest">此番未有掉落</p>}
                       </div>
                     </>
                   ) : (
-                    /* ── 非戰鬥結果：原有簡易訊息 ── */
                     <>
                       <h3 className="text-[#FFD700] text-xl mb-4 font-bold tracking-widest">探索結果</h3>
-                      <p className="text-white/90 text-sm mb-8 leading-relaxed">
-                        {activeModal.resultMessage}
-                      </p>
+                      <p className="text-white/90 text-sm mb-8 leading-relaxed">{activeModal.resultMessage}</p>
                     </>
                   )}
-
                   <button onClick={closeModal} className="w-full py-2 rounded bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] text-sm tracking-widest hover:bg-[#00E5FF]/20 active:scale-95 transition-all">
                     收下
                   </button>
