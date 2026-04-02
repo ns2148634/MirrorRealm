@@ -229,13 +229,6 @@ export default function BagView() {
         .animate-shrink-in-fade { animation: shrink-in-fade 0.4s cubic-bezier(0.4,0,0.2,1) forwards; }
       `}</style>
 
-      {/* 載入中遮罩 */}
-      {isLoading && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <span className="text-[#00E5FF] tracking-[0.5em] text-sm animate-pulse">神識感應中…</span>
-        </div>
-      )}
-
       {/* =========================================
           L1：芥子總覽
           ========================================= */}

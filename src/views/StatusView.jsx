@@ -147,15 +147,12 @@ export default function StatusView() {
 
   if (!player) return null;
 
-  // ── 修為進度計算 ────────────────────────────────────────────
-  const realmLevel    = player.realm_level ?? 1;
-  const realmName     = REALM_NAMES[realmLevel] ?? `境界 ${realmLevel}`;
-  const expCurrent    = player.mind ?? 0;
-  const expRequired   = REALM_EXP_REQUIRED[realmLevel] ?? null;   // null = 頂峰
-  const expPercent    = expRequired
-    ? Math.min(100, Math.floor((expCurrent / expRequired) * 100))
-    : 100;
-  const canBreak      = expRequired !== null && expCurrent >= expRequired;
+  // ── 境界計算 ────────────────────────────────────────────────
+  const realmLevel  = player.realm_level ?? 1;
+  const realmName   = REALM_NAMES[realmLevel] ?? `境界 ${realmLevel}`;
+  const aura        = player.aura     ?? 0;
+  const maxAura     = player.max_aura ?? 120;
+  const canBreak    = aura >= maxAura;
 
   // ── 境界突破 ────────────────────────────────────────────────
   const handleBreakthrough = async () => {
@@ -203,11 +200,30 @@ export default function StatusView() {
           className="absolute inset-0 w-full h-full object-contain z-0 pointer-events-none" />
       </div>
 
-      {/* 周天靈氣文字 */}
-      <div className="text-[clamp(13px,3.8cqw,16px)] text-white/80 tracking-[0.2em] font-serif text-center shrink-0 mb-3">
-        周天靈氣 <span className="text-[#00E5FF] font-mono">{player.aura ?? 0}</span>
-        /{player.max_aura ?? 120}
-      </div>
+      {/* 周天靈氣 / 突破按鈕 */}
+      {canBreak ? (
+        <div className="shrink-0 mb-3 w-full max-w-[260px]">
+          <button
+            onClick={handleBreakthrough}
+            disabled={isBreaking}
+            className="w-full py-2.5 rounded-lg text-sm tracking-[0.4em] font-serif transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,140,0,0.15))',
+              border:     '1px solid rgba(255,215,0,0.6)',
+              color:      '#FFD700',
+              boxShadow:  '0 0 20px rgba(255,215,0,0.3), inset 0 0 10px rgba(255,215,0,0.05)',
+              animation:  isBreaking ? 'none' : 'pulse-gold 2s infinite',
+            }}
+          >
+            {isBreaking ? '突破中...' : '⚡ 衝擊境界'}
+          </button>
+        </div>
+      ) : (
+        <div className="text-[clamp(13px,3.8cqw,16px)] text-white/80 tracking-[0.2em] font-serif text-center shrink-0 mb-3">
+          周天靈氣 <span className="text-[#00E5FF] font-mono">{player.aura ?? 0}</span>
+          /{player.max_aura ?? 120}
+        </div>
+      )}
 
       {/* ── 命格資訊區 ───────────────────────────────────── */}
       <div className="flex flex-row justify-center items-start gap-[8cqw] px-[8cqw] w-full max-w-[400px] shrink-0 z-10 mb-4">
@@ -233,8 +249,6 @@ export default function StatusView() {
             { label: '壽元',  value: `${player.age ?? 18} 歲` },
             { label: '氣血',  value: `${player.hp ?? 0} / ${player.max_hp ?? 100}` },
             { label: '體力',  value: `${player.sp ?? 0} / ${player.max_sp ?? 100}` },
-            { label: '攻擊',  value: player.attack   ?? 0 },
-            { label: '防禦',  value: player.defense  ?? 0 },
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between items-end w-full">
               <span className="opacity-60 text-[13px]">{label}</span>
@@ -254,98 +268,13 @@ export default function StatusView() {
         </div>
       </div>
 
-      {/* ── 修為進度條區塊 ───────────────────────────────── */}
-      <div className="w-full max-w-[360px] px-[6cqw] shrink-0">
-        <div className="bg-black/40 border border-white/10 rounded-xl p-4 backdrop-blur-sm">
-
-          {/* 標題列 */}
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-[#9CA3AF] text-[12px] tracking-widest">修為</span>
-            {expRequired !== null ? (
-              <span className="text-[#00E5FF] font-mono text-[12px]">
-                {expCurrent} / {expRequired}
-              </span>
-            ) : (
-              <span className="text-[#FFD700] text-[12px] tracking-widest">巔峰</span>
-            )}
-          </div>
-
-          {/* 進度條 */}
-          <div className="h-3 bg-[#1C1F2A] rounded-full overflow-hidden border border-white/5 mb-3">
-            <div
-              className="h-full rounded-full transition-all duration-700 relative overflow-hidden"
-              style={{
-                width:      `${expPercent}%`,
-                background: canBreak
-                  ? 'linear-gradient(90deg, #FFD700, #FF8C00)'
-                  : 'linear-gradient(90deg, #00E5FF, #0099BB)',
-                boxShadow:  canBreak
-                  ? '0 0 12px rgba(255,215,0,0.8)'
-                  : '0 0 8px rgba(0,229,255,0.5)',
-              }}
-            >
-              <div className="absolute inset-0 bg-white/20 animate-pulse" />
-            </div>
-          </div>
-
-          {/* 突破按鈕（僅在可突破時顯示） */}
-          {canBreak && expRequired !== null && (
-            <button
-              onClick={handleBreakthrough}
-              disabled={isBreaking}
-              className="w-full py-2.5 rounded-lg text-sm tracking-[0.4em] font-serif transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                background:  'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,140,0,0.15))',
-                border:      '1px solid rgba(255,215,0,0.6)',
-                color:       '#FFD700',
-                boxShadow:   '0 0 20px rgba(255,215,0,0.3), inset 0 0 10px rgba(255,215,0,0.05)',
-                animation:   isBreaking ? 'none' : 'pulse-gold 2s infinite',
-              }}
-            >
-              {isBreaking ? '突破中...' : '⚡ 衝擊境界'}
-            </button>
-          )}
-
-          {/* 突破結果訊息 */}
-          {breakMessage !== '' && (
-            <p className={`mt-3 text-center text-[13px] tracking-wider leading-relaxed
-              ${breakMessage.includes('成功') ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>
-              {breakMessage}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ── 法寶加身 ─────────────────────────────────────── */}
-      <div className="w-full max-w-[360px] px-[6cqw] shrink-0 mt-3">
-        <div className="bg-black/40 border border-white/10 rounded-xl p-4 backdrop-blur-sm">
-          <div className="text-[#9CA3AF] text-[12px] tracking-widest mb-3">法寶加身</div>
-          <div className="flex flex-col gap-2.5">
-            {EQUIP_SLOTS.map(({ slot, label }) => {
-              const eq = equipment.find((e) => e.slot === slot);
-              return (
-                <div key={slot} className="flex justify-between items-center">
-                  <span className="text-white/40 text-[12px] tracking-widest w-[4em]">{label}</span>
-                  {eq ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[#FFD700] text-[13px] font-mono tracking-wider">{eq.name}</span>
-                      <button
-                        onClick={() => handleUnequip(eq.slot)}
-                        disabled={isUnequipping}
-                        className="text-[10px] text-[#FF3B30]/70 border border-[#FF3B30]/30 px-1.5 py-0.5 rounded active:scale-95 transition-all disabled:opacity-30"
-                      >
-                        卸
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="text-white/15 text-[12px] tracking-widest">─ 空槽 ─</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      {/* 突破結果訊息 */}
+      {breakMessage !== '' && (
+        <p className={`shrink-0 text-center text-[13px] tracking-wider leading-relaxed px-6
+          ${breakMessage.includes('成功') ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>
+          {breakMessage}
+        </p>
+      )}
 
       {/* 按鈕發光動畫 keyframes */}
       <style>{`

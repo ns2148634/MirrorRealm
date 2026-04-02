@@ -235,12 +235,8 @@ export default function CultivateView() {
         .animate-shrink-in-fade { animation: shrink-in-fade 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
       `}</style>
 
-      {/* 🌟 頂部操作列 (使用 Absolute 讓 L1/L2 字體原地淡入淡出) */}
-      <div className="pt-[2vh] px-[6cqw] shrink-0 relative flex justify-center items-center mb-[2vh] h-[40px] z-50">
-        <div className={`absolute inset-0 flex justify-center items-center transition-all duration-300 ${getL1AnimationClass()}`}>
-          <h2 className="text-[clamp(20px,6cqw,28px)] tracking-[0.4em] drop-shadow-[0_0_8px_currentColor] font-bold" style={{ color: auraColor }}>造化識海</h2>
-        </div>
-
+      {/* 🌟 頂部操作列：L1 時隱藏（無標題），L2 時顯示收回/銘記按鈕 */}
+      <div className="pt-[2vh] px-[6cqw] shrink-0 relative flex justify-between items-center mb-[2vh] h-[40px] z-50">
         <div className={`absolute inset-0 flex justify-between items-center px-[6cqw] transition-all duration-300 ${getL2AnimationClass()}`}>
           <button onClick={handleReturnOverview} className="text-gray-400 hover:text-white tracking-widest text-[14px] flex items-center gap-1 active:scale-95 transition-all">
             <span className="text-lg leading-none mt-[-2px]">‹</span> 收回神識

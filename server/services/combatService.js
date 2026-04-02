@@ -4,10 +4,61 @@ import * as db from '../config/db.js';
 const MAX_ROUNDS = 50; // 安全上限，防止無限迴圈
 
 /**
- * 根據攻防計算單次傷害，最低造成 1 點
+ * 根據攻防計算單次傷害，最低造成 1 點（舊公式，保留相容）
  */
 function calcDamage(attackerAtk, defenderDef) {
     return Math.max(1, attackerAtk - defenderDef);
+}
+
+/**
+ * 進階傷害公式
+ *
+ * 最終傷害 = 攻擊 × 技能倍率 × (100 / (100 + 防禦 × (1 - 穿透)))
+ *           × 暴擊倍率 × 境界修正 × 五行倍率 × 標籤倍率 × 隨機(0.9~1.1)
+ *
+ * @param {object} attacker      - { attack, realm_level, crit_rate?, crit_mult? }
+ * @param {object} defender      - { defense, realm_level }
+ * @param {object} [opts]
+ * @param {number} [opts.skillMult=1.0]        - 技能倍率
+ * @param {number} [opts.penetration=0]        - 防禦穿透 0~1
+ * @param {number} [opts.elementalMult=1.0]    - 五行剋制（剋制1.25 被剋0.8）
+ * @param {number} [opts.tagMult=1.0]          - 標籤倍率（如爆發1.2）
+ * @returns {{ damage: number, isCrit: boolean }}
+ */
+export function calcDamageFinal(attacker, defender, opts = {}) {
+    const {
+        skillMult      = 1.0,
+        penetration    = 0,
+        elementalMult  = 1.0,
+        tagMult        = 1.0,
+    } = opts;
+
+    const atk      = Math.max(0, attacker.attack  ?? 10);
+    const def      = Math.max(0, defender.defense ?? 5);
+    const critRate = Math.min(1, Math.max(0, attacker.crit_rate ?? 0.05));
+    const critMult = Math.max(1, attacker.crit_mult ?? 1.5);
+
+    // 境界修正：每差1層 ±10%，上限 ±30%
+    const realmDiff     = (attacker.realm_level ?? 1) - (defender.realm_level ?? 1);
+    const realmModifier = 1 + Math.max(-0.3, Math.min(0.3, 0.1 * realmDiff));
+
+    // 防禦減傷公式（穿透降低有效防禦）
+    const effectiveDef  = def * (1 - Math.min(1, Math.max(0, penetration)));
+    const defReduction  = 100 / (100 + effectiveDef);
+
+    // 暴擊判定
+    const isCrit        = Math.random() < critRate;
+    const critModifier  = isCrit ? critMult : 1.0;
+
+    // 隨機浮動 0.9~1.1
+    const randomFactor  = 0.9 + Math.random() * 0.2;
+
+    const raw = atk * skillMult * defReduction * critModifier * realmModifier * elementalMult * tagMult * randomFactor;
+
+    return {
+        damage: Math.max(1, Math.round(raw)),
+        isCrit,
+    };
 }
 
 /**
