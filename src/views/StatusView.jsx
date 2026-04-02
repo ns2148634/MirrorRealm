@@ -105,7 +105,7 @@ export default function StatusView() {
 
   const currentRealm = realmTemplates.find((r) => r.level === realmLevel);
   const nextRealm    = realmTemplates.find((r) => r.level === realmLevel + 1);
-  const realmName    = currentRealm?.realm_name ?? `境界 ${realmLevel}`;
+  const realmName    = currentRealm?.name ?? `境界 ${realmLevel}`;
   const aura         = player.aura     ?? 0;
   const maxAura      = player.max_aura ?? 120;
 
