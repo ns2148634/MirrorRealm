@@ -131,14 +131,16 @@ const ANIM_CSS = `
 
 // ─────────────────────────────────────────────────────────────────
 export default function AuthScreen() {
-  const [phase,     setPhase]     = useState('waiting');
-  const [otpStep,   setOtpStep]   = useState('email');
-  const [email,     setEmail]     = useState('');
-  const [code,      setCode]      = useState('');
-  const [name,      setName]      = useState('');
-  const [gender,    setGender]    = useState('保密');
-  const [isLoading, setIsLoading] = useState(false);
-  const [message,   setMessage]   = useState('');
+  const [phase,        setPhase]        = useState('waiting');
+  const [otpStep,      setOtpStep]      = useState('email');
+  const [email,        setEmail]        = useState('');
+  const [code,         setCode]         = useState('');
+  const [name,         setName]         = useState('');
+  const [gender,       setGender]       = useState('保密');
+  const [isLoading,    setIsLoading]    = useState(false);
+  const [message,      setMessage]      = useState('');
+  const [installEvent, setInstallEvent] = useState(null);   // Android beforeinstallprompt
+  const [showIosHint,  setShowIosHint]  = useState(false);
 
   const gameStage       = useGameStore(s => s.gameStage);
   const loginWithGoogle = useGameStore(s => s.loginWithGoogle);
@@ -162,6 +164,18 @@ export default function AuthScreen() {
   useEffect(() => {
     if (gameStage === 'naming' && phase === 'login') setPhase('create');
   }, [gameStage, phase]);
+
+  // ── PWA 安裝：Android 捕捉 beforeinstallprompt；iOS 偵測 ────────
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setInstallEvent(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    // iOS：Safari on iPhone/iPad 沒有 beforeinstallprompt，需手動提示
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone;
+    if (isIos && !isStandalone) setShowIosHint(true);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleSendOtp = async () => {
@@ -423,6 +437,32 @@ export default function AuthScreen() {
               color: '#fcd34d', fontSize: 'clamp(12px,3.5vw,14px)',
             }}>
               {message}
+            </p>
+          )}
+
+          {/* ── PWA 安裝提示 ── */}
+          {installEvent && (
+            <button
+              className="mir-btn mir-btn-secondary"
+              style={{ marginTop: '1vw', opacity: 0.75 }}
+              onClick={async () => {
+                installEvent.prompt();
+                await installEvent.userChoice;
+                setInstallEvent(null);
+              }}
+            >
+              ⬇ 安裝至主畫面（離線可用）
+            </button>
+          )}
+          {showIosHint && !installEvent && (
+            <p style={{
+              fontFamily: "'Kaiti', serif", textAlign: 'center',
+              color: 'rgba(148,163,184,0.65)', fontSize: 'clamp(11px,3vw,12px)',
+              lineHeight: 1.7, marginTop: '1vw',
+            }}>
+              在 Safari 點選 <span style={{ color: '#67e8f9' }}>「分享」</span>
+              {' →'} <span style={{ color: '#67e8f9' }}>「加入主畫面」</span>
+              {' '}即可安裝
             </p>
           )}
         </div>

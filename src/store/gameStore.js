@@ -17,22 +17,16 @@ const useGameStore = create((set, get) => ({
   isLoading:      false,
   realmTemplates: [],
 
-  // ── 啟動時：檢查 Supabase session，並監聽 Auth 事件 ──────────
+  // ── 啟動時：以 onAuthStateChange 為唯一狀態驅動來源 ──────────
+  // 不再呼叫 getSession()，避免 PKCE code exchange 未完成就
+  // 得到 null session，覆蓋掉 SIGNED_IN 已設好的 'playing' 狀態。
   checkAuthAndPlayer: () => {
-    // 先檢查是否已有 session（例如 OAuth 重定向回來後）
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        get()._syncPlayerWithBackend(session.user.id);
-      } else {
-        set({ gameStage: 'login' });
-      }
-    });
-
-    // 監聽後續的登入 / 登出事件（OTP 驗證成功、Google OAuth 回調等）
     supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+        // 已有 session（既有登入 or OAuth 回調完成）→ 同步玩家
         get()._syncPlayerWithBackend(session.user.id);
-      } else if (event === 'SIGNED_OUT') {
+      } else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
+        // 明確登出，或初始化時確認無 session → 回登入畫面
         set({ gameStage: 'login', player: null });
       }
     });
