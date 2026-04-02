@@ -1,5 +1,6 @@
 // src/views/WorldView.jsx
 import React, { useState } from 'react';
+import useGameStore from '../store/gameStore';
 
 // ==========================================
 // 大千世界：五大系統節點
@@ -51,9 +52,13 @@ const MOCK_WORLD_DATA = {
 };
 
 export default function WorldView() {
-  const [viewState, setViewState] = useState('overview'); 
+  const player = useGameStore((s) => s.player);
+  const [viewState, setViewState] = useState('overview');
   const [activeTab, setActiveTab] = useState('market');
   const [selectedItem, setSelectedItem] = useState(null);
+
+  const spiritStones = player?.spirit_stones ?? 0;
+  const silver       = player?.silver       ?? 0;
 
   const triggerHaptic = (pattern) => {
     if (navigator.vibrate) navigator.vibrate(pattern);
@@ -104,8 +109,32 @@ export default function WorldView() {
 
   return (
     <div className="h-full w-full relative flex flex-col bg-transparent overflow-hidden text-white font-serif z-10 pt-[5cqw]">
-      
-      {/* 🌟 空間穿梭動畫法則 */}
+
+      {/* ── 右上角餘額（懸浮極簡風） ────────────────────────────── */}
+      <div className="absolute top-4 right-4 z-50 flex flex-col items-end gap-1 pointer-events-none">
+        <div
+          className="flex items-center gap-1.5 font-mono text-[13px] tracking-wider"
+          style={{
+            color:  '#00E5FF',
+            filter: 'drop-shadow(0 1px 6px rgba(0,229,255,0.6))',
+          }}
+        >
+          <span className="text-[10px] opacity-70 font-serif tracking-widest">靈石</span>
+          {spiritStones.toLocaleString()}
+        </div>
+        <div
+          className="flex items-center gap-1.5 font-mono text-[13px] tracking-wider"
+          style={{
+            color:  '#CBD5E1',
+            filter: 'drop-shadow(0 1px 4px rgba(203,213,225,0.4))',
+          }}
+        >
+          <span className="text-[10px] opacity-70 font-serif tracking-widest">銀兩</span>
+          {silver.toLocaleString()}
+        </div>
+      </div>
+
+      {/* 空間穿梭動畫法則 */}
       <style>{`
         @keyframes gentle-float {
           0%, 100% { transform: translateY(0); }

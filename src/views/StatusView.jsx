@@ -287,6 +287,30 @@ export default function StatusView() {
               {getEvilTitle(player.karma_evil)}
             </span>
           </div>
+
+          <div className="w-full h-[1px] bg-white/5 my-1" />
+
+          {/* 靈石 */}
+          <div className="flex justify-between items-end w-full">
+            <span className="opacity-60 text-[clamp(13px,4cqw,16px)] tracking-[0.4em]">靈石</span>
+            <span
+              className="font-mono text-[clamp(14px,4.5cqw,18px)] tracking-wider drop-shadow-sm"
+              style={{ color: '#00E5FF', textShadow: '0 0 8px rgba(0,229,255,0.4)' }}
+            >
+              {(player.spirit_stones ?? 0).toLocaleString()}
+            </span>
+          </div>
+
+          {/* 銀兩 */}
+          <div className="flex justify-between items-end w-full">
+            <span className="opacity-60 text-[clamp(13px,4cqw,16px)] tracking-[0.4em]">銀兩</span>
+            <span
+              className="font-mono text-[clamp(14px,4.5cqw,18px)] tracking-wider drop-shadow-sm"
+              style={{ color: '#CBD5E1' }}
+            >
+              {(player.silver ?? 0).toLocaleString()}
+            </span>
+          </div>
         </div>
       </div>
 

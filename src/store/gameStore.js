@@ -169,11 +169,16 @@ const useGameStore = create((set, get) => ({
         const p    = state.player;
         const mult = state.isMeditating ? 3 : 1; // 定神調息時 hp/sp/ep 回復 3x
 
-        // 每秒累加（定神調息期間 hp/sp/ep 加速，aura 固定速率）
+        // 每秒累加（定神調息期間 hp/sp/ep 加速，aura 固定速率且上限封頂不再累加）
         acc.hp   += REGEN_PER_MIN.hp   / 60 * mult;
         acc.sp   += REGEN_PER_MIN.sp   / 60 * mult;
         acc.ep   += REGEN_PER_MIN.ep   / 60 * mult;
-        acc.aura += REGEN_PER_MIN.aura / 60;
+        const maxAura = p.max_aura ?? 120;
+        if ((p.aura ?? 0) < maxAura) {
+          acc.aura += REGEN_PER_MIN.aura / 60;
+        } else {
+          acc.aura = 0; // 已達上限，清空累加器
+        }
 
         const hpGain   = Math.floor(acc.hp);
         const spGain   = Math.floor(acc.sp);
