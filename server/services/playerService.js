@@ -154,7 +154,7 @@ export async function getPlayerStatus(playerId) {
 export async function breakthrough(playerId) {
     // 1. 讀取玩家當前屬性
     const playerResult = await db.query(
-        `SELECT realm_level, aura, max_hp, max_sp, attack, defense
+        `SELECT realm_level, aura, max_aura, max_hp, max_sp, attack, defense
          FROM players WHERE id = $1`,
         [playerId]
     );
@@ -172,10 +172,10 @@ export async function breakthrough(playerId) {
     }
     const nextRealm = templateResult.rows[0];
 
-    // 3. 周天靈氣門檻檢查（累計制，不扣除靈氣）
-    if (player.aura < nextRealm.required_exp) {
-        const gap = nextRealm.required_exp - player.aura;
-        throw new Error(`周天靈氣不足，強行突破恐會走火入魔（還差 ${gap} 點靈氣）`);
+    // 3. 周天靈氣須達上限才可突破
+    if (player.aura < (player.max_aura ?? 120)) {
+        const gap = (player.max_aura ?? 120) - player.aura;
+        throw new Error(`周天靈氣尚未圓滿，強行突破恐會走火入魔（還差 ${gap} 點）`);
     }
 
     // 4. Transaction：提升境界、更新屬性、補滿 HP / SP

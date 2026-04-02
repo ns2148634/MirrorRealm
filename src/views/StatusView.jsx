@@ -103,16 +103,15 @@ export default function StatusView() {
 
   if (!player) return null;
 
-  const currentRealm = realmTemplates.find((r) => r.level === realmLevel);
-  const nextRealm    = realmTemplates.find((r) => r.level === realmLevel + 1);
+  const nextRealm = realmTemplates.find((r) => r.level === realmLevel + 1);
   const realmName    = player.realm_name ?? `境界 ${realmLevel}`;
-  const aura = player.aura ?? 0;
+  const aura    = player.aura     ?? 0;
+  const maxAura = player.max_aura ?? 120;
 
-  // 突破條件：需有下一境界，且周天靈氣達到該境界的 required_exp
-  const requiredExp = currentRealm?.required_exp ?? Infinity;
-  const canBreak    = !!nextRealm && aura >= requiredExp;
+  // 突破條件：需有下一境界，且周天靈氣達到上限
+  const canBreak   = !!nextRealm && aura >= maxAura;
   // 已到頂：模板已載入且確實沒有下一境界
-  const isMaxRealm  = realmTemplates.length > 0 && !nextRealm;
+  const isMaxRealm = realmTemplates.length > 0 && !nextRealm;
 
   // ── 境界突破 ────────────────────────────────────────────────────
   const handleBreakthrough = async () => {
@@ -193,7 +192,7 @@ export default function StatusView() {
   };
 
   return (
-    <div className="h-full w-full relative bg-transparent overflow-y-auto flex flex-col items-center pt-[4vh] pb-[calc(env(safe-area-inset-bottom,20px)+8vh)]">
+    <div className="h-full w-full relative bg-transparent overflow-y-auto flex flex-col items-center pt-[8vh] pb-[calc(env(safe-area-inset-bottom,20px)+8vh)]">
 
       {/* 全螢幕突破閃光 */}
       {showFlash && (
@@ -237,7 +236,7 @@ export default function StatusView() {
         </div>
       ) : (
         <div className="text-[clamp(11px,3.5cqw,14px)] text-white/80 tracking-[0.2em] font-serif text-center shrink-0 mb-[3vh]">
-          周天靈氣 {aura} / {isMaxRealm ? aura : requiredExp}
+          周天靈氣 {aura} / {maxAura}
           {isMaxRealm && <span className="ml-2 text-[#FFD700]/60">（已臻巔峰）</span>}
         </div>
       )}
