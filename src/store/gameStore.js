@@ -205,6 +205,13 @@ const useGameStore = create((set, get) => ({
     recoverySeconds = 0;
   },
 
+  // ── 登出 ─────────────────────────────────────────────────────
+  signOut: async () => {
+    get().stopOnlineRecovery();
+    await supabase.auth.signOut();
+    set({ gameStage: 'login', player: null });
+  },
+
   // ── 局部更新玩家狀態（突破/裝備後呼叫）──────────────────────
   setPlayer: (patch) => set((state) => ({
     player: state.player ? { ...state.player, ...patch } : state.player,

@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import useGameStore from './store/gameStore';
 
@@ -14,17 +14,6 @@ export default function App() {
   const startOnlineRecovery  = useGameStore(s => s.startOnlineRecovery);
   const stopOnlineRecovery   = useGameStore(s => s.stopOnlineRecovery);
   const generateInitialTasks = useGameStore(s => s.generateInitialTasks);
-
-  // 🌟 新增：開場動畫防護鎖 (強制等待 4.2 秒)
-  const [introFinished, setIntroFinished] = useState(false);
-
-  useEffect(() => {
-    // 確保星斗連線動畫一定會播完
-    const timer = setTimeout(() => {
-      setIntroFinished(true);
-    }, 4200);
-    return () => clearTimeout(timer);
-  }, []);
 
   // 啟動時檢查 Supabase session
   useEffect(() => {
@@ -42,13 +31,8 @@ export default function App() {
     return () => stopOnlineRecovery();
   }, [gameStage, fetchPlayerStatus, startOnlineRecovery, stopOnlineRecovery, generateInitialTasks]);
 
-  // 🛡️ 核心判斷邏輯：
-  // 1. 如果動畫還沒播完 (4.2秒內) -> 強制顯示 AuthScreen 動畫
-  // 2. 如果狀態還是未登入/創角 -> 繼續顯示 AuthScreen
-  const showAuth = !introFinished || gameStage === 'login' || gameStage === 'naming';
-  
-  // 只有動畫播完了，而且確定登入了，才正式顯示主畫面
-  const showPlay = introFinished && gameStage === 'playing';
+  const showAuth = gameStage === 'login' || gameStage === 'naming';
+  const showPlay = gameStage === 'playing';
 
   return (
     <>

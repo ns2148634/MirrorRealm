@@ -1,52 +1,13 @@
 /**
- * AuthScreen.jsx — 《鏡界》開場「星斗連線」動畫 + 無密碼登入 + 創角
+ * AuthScreen.jsx — 《鏡界》無密碼登入 + 創角
  *
  * Phase 狀態機：
- * 'waiting'  → 等 document.fonts.ready（避免字體未載入就開始動畫）
- * 'stars'    → 隨機星陣逐點亮起、逐線連接（~4s）
- * 'login'    → 星圖上浮淡出，鏡界標題 + 登入 UI 從下淡入
- * 'create'   → 創角 UI
+ * 'login'  → 登入 UI
+ * 'create' → 創角 UI（gameStage === 'naming' 時切入）
  */
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import useGameStore from '../store/gameStore';
-
-// 🔮 萬法自然：隨機生成星陣 (預設 7 顆星)
-const generateRandomStars = (numStars = 7) => {
-  const stars = [];
-  for (let i = 0; i < numStars; i++) {
-    stars.push({
-      // 配合 viewBox 0 0 320 220，讓星星保持在安全範圍內 (邊緣內縮 30)
-      x: Math.floor(Math.random() * 260) + 30, 
-      y: Math.floor(Math.random() * 160) + 30, 
-    });
-  }
-  // 🌟 核心陣眼：按照 X 軸由左至右排序，確保連線順暢不打結
-  return stars.sort((a, b) => a.x - b.x);
-};
-
-// ── 每次載入網頁時，推演出一套全新的星圖 ─────────────────────
-const STARS = generateRandomStars(7);
-const EDGES = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]];
-
-// ── 時序常數 (保留原本的完美節奏) ─────────────────────────────────
-const BEAT      = 0.48;  // 每顆星間隔（秒）
-const STAR_DUR  = 0.50;  // 星點彈出動畫時長
-const LINE_DUR  = 0.42;  // 線條繪製時長
-const LINE_LAG  = 0.28;  // 星點出現後幾秒開始畫線
-// 星座繪製完畢 + 0.8s 停頓 → 切入 login
-const STARS_TO_LOGIN_MS = Math.round(
-  ((STARS.length - 1) * BEAT + STAR_DUR + 0.8) * 1000
-); // ≈ 4200ms
-
-// ── 背景散星（固定偽隨機，避免每次 render 重算）──────────────────
-const BG_STARS = Array.from({ length: 48 }, (_, i) => ({
-  cx:  ((i * 47 + 13) % 100).toFixed(1),
-  cy:  ((i * 31 + 7)  % 100).toFixed(1),
-  r:   i % 5 === 0 ? 1.3 : 0.65,
-  op:  (0.10 + (i % 6) * 0.06).toFixed(2),
-  dur: (2.4 + (i % 5) * 0.7).toFixed(1),
-  del: ((i % 7) * 0.45).toFixed(2),
-}));
+import RealmBackground from '../components/RealmBackground';
 
 const GENDERS = [
   { value: '男',   label: '乾（男）' },
@@ -56,25 +17,6 @@ const GENDERS = [
 
 // ── CSS ───────────────────────────────────────────────────────────
 const ANIM_CSS = `
-  /* 背景星點閃爍 */
-  @keyframes twinkle {
-    0%, 100% { opacity: var(--op); }
-    50%       { opacity: calc(var(--op) * 0.25); }
-  }
-
-  /* 星點彈出：scale + opacity */
-  @keyframes star-pop {
-    0%   { opacity: 0; transform: scale(0.05); }
-    60%  { opacity: 1; transform: scale(1.45); }
-    100% { opacity: 1; transform: scale(1);    }
-  }
-
-  /* 線條繪製（stroke-dashoffset 300→0）*/
-  @keyframes line-draw {
-    from { stroke-dashoffset: 300; }
-    to   { stroke-dashoffset: 0;   }
-  }
-
   /* 登入/創角 UI 淡入上浮 */
   @keyframes ui-in {
     from { opacity: 0; transform: translateY(22px); }
@@ -131,7 +73,7 @@ const ANIM_CSS = `
 
 // ─────────────────────────────────────────────────────────────────
 export default function AuthScreen() {
-  const [phase,        setPhase]        = useState('waiting');
+  const [phase,        setPhase]        = useState('login');
   const [otpStep,      setOtpStep]      = useState('email');
   const [email,        setEmail]        = useState('');
   const [code,         setCode]         = useState('');
@@ -139,7 +81,7 @@ export default function AuthScreen() {
   const [gender,       setGender]       = useState('保密');
   const [isLoading,    setIsLoading]    = useState(false);
   const [message,      setMessage]      = useState('');
-  const [installEvent, setInstallEvent] = useState(null);   // Android beforeinstallprompt
+  const [installEvent, setInstallEvent] = useState(null);
   const [showIosHint,  setShowIosHint]  = useState(false);
 
   const gameStage       = useGameStore(s => s.gameStage);
@@ -148,28 +90,15 @@ export default function AuthScreen() {
   const verifyOtp       = useGameStore(s => s.verifyOtp);
   const createCharacter = useGameStore(s => s.createCharacter);
 
-  // ── 字體載入完成後啟動星座動畫 ──────────────────────────────────
-  useEffect(() => {
-    document.fonts.ready.then(() => setPhase('stars'));
-  }, []);
-
-  // ── 星座動畫結束後切換至 login ───────────────────────────────────
-  useEffect(() => {
-    if (phase !== 'stars') return;
-    const t = setTimeout(() => setPhase('login'), STARS_TO_LOGIN_MS);
-    return () => clearTimeout(t);
-  }, [phase]);
-
   // ── gameStage 變為 naming 時切入創角介面 ────────────────────────
   useEffect(() => {
-    if (gameStage === 'naming' && phase === 'login') setPhase('create');
-  }, [gameStage, phase]);
+    if (gameStage === 'naming') setPhase('create');
+  }, [gameStage]);
 
   // ── PWA 安裝：Android 捕捉 beforeinstallprompt；iOS 偵測 ────────
   useEffect(() => {
     const handler = (e) => { e.preventDefault(); setInstallEvent(e); };
     window.addEventListener('beforeinstallprompt', handler);
-    // iOS：Safari on iPhone/iPad 沒有 beforeinstallprompt，需手動提示
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches
       || window.navigator.standalone;
@@ -210,126 +139,24 @@ export default function AuthScreen() {
     if (!r.success) setMessage(r.error ?? '創角失敗，請稍後再試');
   };
 
-  const isLoginPhase      = phase === 'login' || phase === 'create';
-  const showConstellation = phase !== 'create';
-
   // ─────────────────────────────────────────────────────────────
   return (
-    <div
-      className="absolute inset-0 overflow-hidden flex flex-col items-center justify-center gap-6"
-      style={{
-        background: [
-          'radial-gradient(ellipse 90% 70% at 50% 35%, #040d1a 0%, transparent 70%)',
-          'linear-gradient(180deg, #030810 0%, #010306 100%)',
-        ].join(', '),
-      }}
-    >
+    <div className="absolute inset-0 overflow-hidden flex flex-col items-center justify-center gap-6">
       <style>{ANIM_CSS}</style>
 
-      {/* ── 背景散星 ── */}
-      <svg
-        className="absolute inset-0 w-full h-full pointer-events-none"
-        aria-hidden="true"
-      >
-        {BG_STARS.map((s, i) => (
-          <circle
-            key={i}
-            cx={`${s.cx}%`} cy={`${s.cy}%`} r={s.r}
-            fill="white"
-            style={{
-              '--op': s.op,
-              opacity: s.op,
-              animation: `twinkle ${s.dur}s ease-in-out ${s.del}s infinite`,
-            }}
-          />
-        ))}
-      </svg>
+      {/* ── 境界背景 ── */}
+      <RealmBackground />
 
-      {/* ── 星座 SVG ── */}
-      {showConstellation && (
-        <div
-          style={{
-            flexShrink: 0,
-            transition: 'transform 1.1s cubic-bezier(0.4,0,0.2,1), opacity 1.1s ease',
-            transform:  isLoginPhase ? 'translateY(-6vh)' : 'translateY(0)',
-            opacity:    isLoginPhase ? 0.22 : 1,
-          }}
-        >
-          <svg
-            viewBox="0 0 320 220"
-            style={{ width: 'min(88vw, 340px)', display: 'block', overflow: 'visible' }}
-            aria-hidden="true"
-          >
-            <defs>
-              {/* 星點發光濾鏡 */}
-              <filter id="sg" x="-80%" y="-80%" width="260%" height="260%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-
-            {/* 連線（line-draw 動畫） */}
-            {EDGES.map(([a, b], i) => {
-              const delay = (i * BEAT + LINE_LAG).toFixed(2);
-              return (
-                <line
-                  key={`l${i}`}
-                  x1={STARS[a].x} y1={STARS[a].y}
-                  x2={STARS[b].x} y2={STARS[b].y}
-                  stroke="rgba(0,229,255,0.50)"
-                  strokeWidth="1"
-                  strokeLinecap="round"
-                  strokeDasharray={300}
-                  style={{
-                    strokeDashoffset: phase === 'waiting' ? 300 : undefined,
-                    animation: phase !== 'waiting'
-                      ? `line-draw ${LINE_DUR}s ease-out ${delay}s both`
-                      : 'none',
-                  }}
-                />
-              );
-            })}
-
-            {/* 星點（star-pop 動畫） */}
-            {STARS.map((s, i) => {
-              const delay = (i * BEAT).toFixed(2);
-              return (
-                <g
-                  key={`s${i}`}
-                  filter="url(#sg)"
-                  style={{
-                    transformOrigin: `${s.x}px ${s.y}px`,
-                    animation: phase !== 'waiting'
-                      ? `star-pop ${STAR_DUR}s cubic-bezier(.34,1.56,.64,1) ${delay}s both`
-                      : 'none',
-                    opacity: phase === 'waiting' ? 0 : undefined,
-                  }}
-                >
-                  {/* 外暈 */}
-                  <circle cx={s.x} cy={s.y} r={7}   fill="rgba(0,229,255,0.12)" />
-                  {/* 主體 */}
-                  <circle cx={s.x} cy={s.y} r={3.8}  fill="#00E5FF" />
-                  {/* 亮芯 */}
-                  <circle cx={s.x} cy={s.y} r={1.4}  fill="rgba(255,255,255,0.95)" />
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-      )}
-
-      {/* ── Login UI ── */}
+      {/* ── 登入 UI ── */}
       {phase === 'login' && (
         <div
           style={{
-            animation: 'ui-in 0.9s ease 0.1s both',
+            animation: 'ui-in 0.9s ease both',
             width: '100%', maxWidth: 420,
             padding: '0 9vw',
             display: 'flex', flexDirection: 'column', gap: '3.5vw',
             flexShrink: 0,
+            position: 'relative', zIndex: 10,
           }}
         >
           {/* 標題 */}
@@ -477,6 +304,7 @@ export default function AuthScreen() {
             padding: '0 9vw',
             display: 'flex', flexDirection: 'column', gap: '4vw',
             flexShrink: 0,
+            position: 'relative', zIndex: 10,
           }}
         >
           <div style={{ textAlign: 'center', marginBottom: '1vw' }}>

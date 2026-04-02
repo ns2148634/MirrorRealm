@@ -1,5 +1,5 @@
 // server/controllers/authController.js
-import { syncAuth } from '../services/authService.js';
+import { syncAuth, deleteAccount, rebornPlayer } from '../services/authService.js';
 
 export async function syncAuthHandler(req, res) {
     const { auth_id, name, gender } = req.body;
@@ -18,5 +18,29 @@ export async function syncAuthHandler(req, res) {
         }
         console.error('[authController] syncAuth 失敗:', err.message);
         return res.status(500).json({ message: '伺服器錯誤，請稍後再試' });
+    }
+}
+
+export async function deleteAccountHandler(req, res) {
+    const { playerId } = req.body;
+    if (!playerId) return res.status(400).json({ message: 'playerId 為必填' });
+    try {
+        await deleteAccount(playerId);
+        return res.json({ message: '帳號已刪除' });
+    } catch (err) {
+        console.error('[authController] deleteAccount 失敗:', err.message);
+        return res.status(500).json({ message: '刪除失敗，請稍後再試' });
+    }
+}
+
+export async function rebornHandler(req, res) {
+    const { playerId } = req.body;
+    if (!playerId) return res.status(400).json({ message: 'playerId 為必填' });
+    try {
+        await rebornPlayer(playerId);
+        return res.json({ message: '輪迴重生，命格已消散' });
+    } catch (err) {
+        console.error('[authController] reborn 失敗:', err.message);
+        return res.status(500).json({ message: '重生失敗，請稍後再試' });
     }
 }

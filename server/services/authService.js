@@ -43,3 +43,18 @@ export async function syncAuth(authId, name = null, gender = null) {
 
     return { isNew: false, player: result.rows[0] };
 }
+
+/**
+ * 刪除玩家帳號（清除 players 資料列）。
+ * Supabase Auth 層的 user 刪除需 service-role key，此處僅清除遊戲資料。
+ */
+export async function deleteAccount(playerId) {
+    await query('DELETE FROM players WHERE id = $1::uuid', [playerId]);
+}
+
+/**
+ * 重生：刪除角色資料，讓下次 sync 時回到創角流程。
+ */
+export async function rebornPlayer(playerId) {
+    await query('DELETE FROM players WHERE id = $1::uuid', [playerId]);
+}
