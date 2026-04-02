@@ -9,6 +9,7 @@ import PlayingStage from './components/PlayingStage';
 // 🌟 核心改動：在 App.jsx 中加入開場動畫防護鎖，確保星斗連線動畫一定會播完
 export default function App() {
   const gameStage            = useGameStore(s => s.gameStage);
+  const introFinished        = useGameStore(s => s.introFinished);
   const checkAuthAndPlayer   = useGameStore(s => s.checkAuthAndPlayer);
   const fetchPlayerStatus    = useGameStore(s => s.fetchPlayerStatus);
   const startOnlineRecovery  = useGameStore(s => s.startOnlineRecovery);
@@ -31,8 +32,9 @@ export default function App() {
     return () => stopOnlineRecovery();
   }, [gameStage, fetchPlayerStatus, startOnlineRecovery, stopOnlineRecovery, generateInitialTasks]);
 
-  const showAuth = gameStage === 'login' || gameStage === 'naming';
-  const showPlay = gameStage === 'playing';
+  // 開場動畫未播完前，無論 gameStage 為何都顯示 AuthScreen
+  const showAuth = !introFinished || gameStage === 'login' || gameStage === 'naming';
+  const showPlay = gameStage === 'playing' && introFinished;
 
   return (
     <>

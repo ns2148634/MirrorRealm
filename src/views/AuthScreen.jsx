@@ -123,27 +123,34 @@ export default function AuthScreen() {
   const [installEvent, setInstallEvent] = useState(null);
   const [showIosHint,  setShowIosHint]  = useState(false);
 
-  const gameStage       = useGameStore(s => s.gameStage);
-  const loginWithGoogle = useGameStore(s => s.loginWithGoogle);
-  const sendOtp         = useGameStore(s => s.sendOtp);
-  const verifyOtp       = useGameStore(s => s.verifyOtp);
-  const createCharacter = useGameStore(s => s.createCharacter);
+  const gameStage          = useGameStore(s => s.gameStage);
+  const markIntroFinished  = useGameStore(s => s.markIntroFinished);
+  const loginWithGoogle    = useGameStore(s => s.loginWithGoogle);
+  const sendOtp            = useGameStore(s => s.sendOtp);
+  const verifyOtp          = useGameStore(s => s.verifyOtp);
+  const createCharacter    = useGameStore(s => s.createCharacter);
 
   // ── 字體載入完成後啟動星座動畫 ──────────────────────────────────
   useEffect(() => {
     document.fonts.ready.then(() => setPhase('stars'));
   }, []);
 
-  // ── 星座動畫結束後切換至 login ───────────────────────────────────
+  // ── 星座動畫結束後切換至 login，並通知 App 動畫完成 ─────────────
   useEffect(() => {
     if (phase !== 'stars') return;
-    const t = setTimeout(() => setPhase('login'), STARS_TO_LOGIN_MS);
+    const t = setTimeout(() => {
+      setPhase('login');
+      markIntroFinished();
+    }, STARS_TO_LOGIN_MS);
     return () => clearTimeout(t);
   }, [phase]);
 
   // ── gameStage 變為 naming 時切入創角介面（任何 phase 都接受）───
   useEffect(() => {
-    if (gameStage === 'naming') setPhase('create');
+    if (gameStage === 'naming') {
+      setPhase('create');
+      markIntroFinished();
+    }
   }, [gameStage]);
 
   // ── PWA 安裝：Android 捕捉 beforeinstallprompt；iOS 偵測 ────────

@@ -25,11 +25,13 @@ const TERRAIN_MAPPING = {
 };
 
 export default function ExploreView() {
-  const player = useGameStore((state) => state.player);
-  const reduceEp = useGameStore((state) => state.reduceEp); 
-  
+  const player        = useGameStore((state) => state.player);
+  const reduceEp      = useGameStore((state) => state.reduceEp);
+  const isMeditating  = useGameStore((state) => state.isMeditating);
+  const setMeditating = useGameStore((state) => state.setMeditating);
+
   const [isScanning, setIsScanning] = useState(false);
-  const [isTuning, setIsTuning] = useState(false);
+  const [isTuning,   setIsTuning]   = useState(false);
   const [isPressing, setIsPressing] = useState(false);
   
   const [events, setEvents] = useState([]); 
@@ -44,47 +46,20 @@ export default function ExploreView() {
 
   const handlePointerDown = (e) => {
     e.preventDefault();
-    if (isScanning || activeModal) return; 
+    if (isScanning || activeModal) return;
+    // 定神調息中：短按可解除
+    if (isMeditating) return;
     pressStartTime.current = Date.now();
     setIsPressing(true);
-    if (navigator.vibrate) navigator.vibrate(10); 
-    
-    pressTimer.current = setTimeout(async () => {
-      const entering = !isTuning;
-      setIsTuning(entering);
+    if (navigator.vibrate) navigator.vibrate(10);
+
+    pressTimer.current = setTimeout(() => {
       setIsPressing(false);
       if (navigator.vibrate) navigator.vibrate([50, 50, 150]);
-
-      if (!entering) {
-        setMessage('凝神聚氣，外放神識');
-        return;
-      }
-
-      if (!player?.id) {
-        setMessage('尚未感知到道友的命格');
-        setIsTuning(false);
-        return;
-      }
-
-      setMessage('凝神入定，調息中...');
-      try {
-        const res = await fetch('/api/player/meditate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ playerId: player.id }),
-        });
-        const result = await res.json();
-        if (!res.ok) {
-          setMessage(result.message || '氣息尚未平穩');
-          setIsTuning(false);
-        } else {
-          const { hp_restored, sp_restored } = result.data;
-          setMessage(`調息完畢，氣血 +${hp_restored}，體力 +${sp_restored}`);
-        }
-      } catch {
-        setMessage('調息失敗，天地靈氣紊亂');
-        setIsTuning(false);
-      }
+      // 進入定神調息
+      setIsTuning(true);
+      setMeditating(true);
+      setMessage('凝神入定，體力・精力・氣血回復加速...');
     }, 3000);
   };
 
@@ -96,10 +71,12 @@ export default function ExploreView() {
     pressTimer.current = null;
     pressStartTime.current = null;
     setIsPressing(false);
-    
+
     if (duration < 500) {
-      if (isTuning) {
+      if (isMeditating) {
+        // 短按解除定神調息
         setIsTuning(false);
+        setMeditating(false);
         setMessage('凝神聚氣，外放神識');
         if (navigator.vibrate) navigator.vibrate(15);
       } else {
@@ -109,6 +86,10 @@ export default function ExploreView() {
   };
 
   const openNodeModal = (clickedNode) => {
+    if (isMeditating) {
+      setMessage('定神調息中，無法進行互動');
+      return;
+    }
     setActiveModal({ step: 'info', node: clickedNode });
   };
 
@@ -160,8 +141,12 @@ export default function ExploreView() {
 
   const handleScan = () => {
     if (!player?.id) {
-        setMessage('尚未感知到道友的命格');
-        return;
+      setMessage('尚未感知到道友的命格');
+      return;
+    }
+    if (isMeditating) {
+      setMessage('定神調息中，無法外放神識');
+      return;
     }
     if (player.ep < 10) {
       setMessage('精力不足，無法外放神識');
@@ -382,7 +367,7 @@ export default function ExploreView() {
                         ))}
                       </div>
                       <div className="bg-black/40 rounded p-3 mb-4 border border-white/5 text-xs space-y-1">
-                        {activeModal.expGained > 0 && <p className="text-[#32D74B] tracking-widest">修為 +{activeModal.expGained}</p>}
+                        {activeModal.expGained > 0 && <p className="text-[#32D74B] tracking-widest">靈氣 +{activeModal.expGained}</p>}
                         {activeModal.itemDropped && <p className="text-[#FFD700] tracking-widest">獲得【{activeModal.itemDropped}】×1</p>}
                         {!activeModal.itemDropped && activeModal.outcome === 'win' && <p className="text-white/30 tracking-widest">此番未有掉落</p>}
                       </div>

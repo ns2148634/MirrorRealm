@@ -5,7 +5,7 @@ import { runCombat } from './combatService.js';
 
 export async function performScan(playerId, lat, lng) {
     // --- Step 1: 資源驗證 ---
-    const playerResult = await db.query("SELECT ep, mind FROM players WHERE id = $1", [playerId]);
+    const playerResult = await db.query("SELECT ep, aura FROM players WHERE id = $1", [playerId]);
 
     // 如果資料庫找不到這個人
     if (playerResult.rows.length === 0) {
@@ -45,13 +45,13 @@ export async function performScan(playerId, lat, lng) {
         });
     }
 
-    // --- Step 4: 扣除資源、增加神識 ---
-    await db.query("UPDATE players SET ep = ep - 10, mind = mind + 1 WHERE id = $1", [playerId]);
+    // --- Step 4: 扣除精力 ---
+    await db.query("UPDATE players SET ep = ep - 10 WHERE id = $1", [playerId]);
 
     // --- Step 5: 回傳結果給前端 ---
     return {
         ep_remaining: player.ep - 10,
-        mind_current: player.mind + 1,
+        aura_current: player.aura,
         grid_id: gridId,
         yield_multiplier: yieldMultiplier,
         nodes: generatedNodes

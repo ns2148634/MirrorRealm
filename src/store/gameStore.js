@@ -6,7 +6,8 @@ let recoveryInterval  = null;
 let recoverySeconds   = 0;
 
 // 每種屬性每分鐘回復量（可集中調整）
-const REGEN_PER_MIN = { hp: 1, sp: 1, ep: 1, aura: 1 };
+// aura（周天靈氣）= 1/8 per min（即每 8 分鐘 +1，需習得引氣入體功法後生效）
+const REGEN_PER_MIN = { hp: 1, sp: 1, ep: 1, aura: 1 / 8 };
 
 // 累加器：追蹤不足 1 的小數部分
 const acc = { hp: 0, sp: 0, ep: 0, aura: 0 };
@@ -16,6 +17,11 @@ const useGameStore = create((set, get) => ({
   player:         null,
   isLoading:      false,
   realmTemplates: [],
+  introFinished:  false,     // 開場動畫是否播完
+  isMeditating:   false,     // 定神調息狀態
+
+  markIntroFinished: () => set({ introFinished: true }),
+  setMeditating:    (v) => set({ isMeditating: v }),
 
   // ── 啟動時：以 onAuthStateChange 為唯一狀態驅動來源 ──────────
   // 不再呼叫 getSession()，避免 PKCE code exchange 未完成就
@@ -160,12 +166,13 @@ const useGameStore = create((set, get) => ({
 
       set((state) => {
         if (!state.player) return {};
-        const p = state.player;
+        const p    = state.player;
+        const mult = state.isMeditating ? 3 : 1; // 定神調息時 hp/sp/ep 回復 3x
 
-        // 每秒累加 1/60（即每分鐘 +1）
-        acc.hp   += REGEN_PER_MIN.hp   / 60;
-        acc.sp   += REGEN_PER_MIN.sp   / 60;
-        acc.ep   += REGEN_PER_MIN.ep   / 60;
+        // 每秒累加（定神調息期間 hp/sp/ep 加速，aura 固定速率）
+        acc.hp   += REGEN_PER_MIN.hp   / 60 * mult;
+        acc.sp   += REGEN_PER_MIN.sp   / 60 * mult;
+        acc.ep   += REGEN_PER_MIN.ep   / 60 * mult;
         acc.aura += REGEN_PER_MIN.aura / 60;
 
         const hpGain   = Math.floor(acc.hp);
