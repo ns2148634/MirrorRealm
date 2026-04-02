@@ -1,10 +1,10 @@
 // src/App.jsx
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import useGameStore from './store/gameStore';
 
 import AuthScreen   from './views/AuthScreen';
-import PlayingStage from './components/PlayingStage';
+import PlayingStage from './views/PlayingStage'; // 注意：確保路徑正確
 
 export default function App() {
   const gameStage            = useGameStore(s => s.gameStage);
@@ -14,7 +14,18 @@ export default function App() {
   const stopOnlineRecovery   = useGameStore(s => s.stopOnlineRecovery);
   const generateInitialTasks = useGameStore(s => s.generateInitialTasks);
 
-  // 啟動時檢查 Supabase session，並掛載 onAuthStateChange 監聽器
+  // 🌟 新增：開場動畫防護鎖 (強制等待 4.2 秒)
+  const [introFinished, setIntroFinished] = useState(false);
+
+  useEffect(() => {
+    // 確保星斗連線動畫一定會播完
+    const timer = setTimeout(() => {
+      setIntroFinished(true);
+    }, 4200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 啟動時檢查 Supabase session
   useEffect(() => {
     checkAuthAndPlayer();
   }, [checkAuthAndPlayer]);
@@ -29,6 +40,14 @@ export default function App() {
     }
     return () => stopOnlineRecovery();
   }, [gameStage, fetchPlayerStatus, startOnlineRecovery, stopOnlineRecovery, generateInitialTasks]);
+
+  // 🛡️ 核心判斷邏輯：
+  // 1. 如果動畫還沒播完 (4.2秒內) -> 強制顯示 AuthScreen 動畫
+  // 2. 如果狀態還是未登入/創角 -> 繼續顯示 AuthScreen
+  const showAuth = !introFinished || gameStage === 'login' || gameStage === 'naming';
+  
+  // 只有動畫播完了，而且確定登入了，才正式顯示主畫面
+  const showPlay = introFinished && gameStage === 'playing';
 
   return (
     <>
@@ -55,11 +74,10 @@ export default function App() {
           style={{ containerType: 'inline-size' }}
         >
           <AnimatePresence mode="wait">
-            {/* login / naming 兩個 stage 都交給 AuthScreen 的內部狀態機處理 */}
-            {(gameStage === 'login' || gameStage === 'naming') && (
+            {showAuth && (
               <AuthScreen key="auth" />
             )}
-            {gameStage === 'playing' && (
+            {showPlay && (
               <PlayingStage key="playing" />
             )}
           </AnimatePresence>
