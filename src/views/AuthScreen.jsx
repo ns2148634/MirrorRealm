@@ -2,27 +2,33 @@
  * AuthScreen.jsx — 《鏡界》開場「星斗連線」動畫 + 無密碼登入 + 創角
  *
  * Phase 狀態機：
- *   'waiting'  → 等 document.fonts.ready（避免字體未載入就開始動畫）
- *   'stars'    → 北斗七星逐點亮起、逐線連接（~4s）
- *   'login'    → 星圖上浮淡出，鏡界標題 + 登入 UI 從下淡入
- *   'create'   → 創角 UI
+ * 'waiting'  → 等 document.fonts.ready（避免字體未載入就開始動畫）
+ * 'stars'    → 隨機星陣逐點亮起、逐線連接（~4s）
+ * 'login'    → 星圖上浮淡出，鏡界標題 + 登入 UI 從下淡入
+ * 'create'   → 創角 UI
  */
 import React, { useState, useEffect } from 'react';
 import useGameStore from '../store/gameStore';
 
-// ── 星座資料：北斗七星（viewBox 0 0 320 220）─────────────────────
-const STARS = [
-  { x: 30,  y: 165 }, // 0 天樞
-  { x: 88,  y: 134 }, // 1 天璿
-  { x: 146, y: 128 }, // 2 天璣
-  { x: 175, y: 152 }, // 3 天權
-  { x: 218, y: 120 }, // 4 玉衡
-  { x: 256, y: 82  }, // 5 開陽
-  { x: 296, y: 54  }, // 6 搖光
-];
+// 🔮 萬法自然：隨機生成星陣 (預設 7 顆星)
+const generateRandomStars = (numStars = 7) => {
+  const stars = [];
+  for (let i = 0; i < numStars; i++) {
+    stars.push({
+      // 配合 viewBox 0 0 320 220，讓星星保持在安全範圍內 (邊緣內縮 30)
+      x: Math.floor(Math.random() * 260) + 30, 
+      y: Math.floor(Math.random() * 160) + 30, 
+    });
+  }
+  // 🌟 核心陣眼：按照 X 軸由左至右排序，確保連線順暢不打結
+  return stars.sort((a, b) => a.x - b.x);
+};
+
+// ── 每次載入網頁時，推演出一套全新的星圖 ─────────────────────
+const STARS = generateRandomStars(7);
 const EDGES = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]];
 
-// ── 時序常數 ──────────────────────────────────────────────────────
+// ── 時序常數 (保留原本的完美節奏) ─────────────────────────────────
 const BEAT      = 0.48;  // 每顆星間隔（秒）
 const STAR_DUR  = 0.50;  // 星點彈出動畫時長
 const LINE_DUR  = 0.42;  // 線條繪製時長
