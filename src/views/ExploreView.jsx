@@ -2,6 +2,37 @@
 import React, { useState, useRef, useEffect } from 'react';
 import useGameStore from '../store/gameStore';
 
+// 戰鬥姿態設定
+const STANCE_OPTIONS = [
+  {
+    key:   'aggressive',
+    label: '殺伐之勢',
+    hint:  '攻 1.2x／防 0.8x',
+    color: '#FF3B30',
+    borderActive: 'border-[#FF3B30]',
+    bgActive:     'bg-[#FF3B30]/15',
+    textActive:   'text-[#FF3B30]',
+  },
+  {
+    key:   'balanced',
+    label: '隨機應變',
+    hint:  '標準',
+    color: '#00E5FF',
+    borderActive: 'border-[#00E5FF]',
+    bgActive:     'bg-[#00E5FF]/15',
+    textActive:   'text-[#00E5FF]',
+  },
+  {
+    key:   'defensive',
+    label: '固守本心',
+    hint:  '防 1.3x／閃 +10%／攻 0.8x',
+    color: '#32D74B',
+    borderActive: 'border-[#32D74B]',
+    bgActive:     'bg-[#32D74B]/15',
+    textActive:   'text-[#32D74B]',
+  },
+];
+
 // 戰鬥日誌各行類型對應顏色
 const LOG_LINE_COLOR = {
   'player-atk':  '#FFD700', // 玩家攻擊 → 黃
@@ -97,7 +128,8 @@ export default function ExploreView() {
       setMessage('定神調息中，無法進行互動');
       return;
     }
-    setActiveModal({ step: 'info', node: clickedNode });
+    // stance 預設 balanced，戰鬥節點才需要姿態選擇
+    setActiveModal({ step: 'info', node: clickedNode, stance: 'balanced' });
   };
 
   const confirmExecuteNode = async () => {
@@ -109,9 +141,10 @@ export default function ExploreView() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          playerId: player.id, 
-          nodeType: activeModal.node.nodeType || '拾荒', 
-          nodeName: activeModal.node.name
+          playerId: player.id,
+          nodeType: activeModal.node.nodeType || '拾荒',
+          nodeName: activeModal.node.name,
+          stance:   activeModal.stance ?? 'balanced',
         })
       });
 
@@ -331,11 +364,37 @@ export default function ExploreView() {
               {activeModal.step === 'info' && (
                 <>
                   <h3 className="text-[#00E5FF] text-xl mb-2 font-bold tracking-widest">{activeModal.node.name}</h3>
-                  <p className="text-gray-400 text-sm mb-6 min-h-[40px] leading-relaxed">
+                  <p className="text-gray-400 text-sm mb-4 min-h-[40px] leading-relaxed">
                     {activeModal.node.description || '此地似乎隱藏著某種機緣...'}
                   </p>
-                  
-                  <div className="bg-black/40 rounded p-3 mb-6 border border-white/5">
+
+                  {/* 戰鬥姿態選擇：僅戰鬥節點顯示 */}
+                  {activeModal.node.nodeType === '戰鬥' && (
+                    <div className="mb-4">
+                      <p className="text-white/40 text-[10px] tracking-[0.4em] mb-2">選擇戰鬥姿態</p>
+                      <div className="flex gap-2">
+                        {STANCE_OPTIONS.map((s) => {
+                          const isActive = activeModal.stance === s.key;
+                          return (
+                            <button
+                              key={s.key}
+                              onClick={() => setActiveModal(prev => ({ ...prev, stance: s.key }))}
+                              className={`flex-1 py-2 px-1 rounded border text-[10px] tracking-wider transition-all active:scale-95
+                                ${isActive
+                                  ? `${s.borderActive} ${s.bgActive} ${s.textActive}`
+                                  : 'border-white/10 text-white/30 hover:border-white/20'
+                                }`}
+                            >
+                              <div className="font-semibold mb-0.5">{s.label}</div>
+                              <div className="opacity-70 text-[9px] leading-tight">{s.hint}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-black/40 rounded p-3 mb-4 border border-white/5">
                     <p className="text-[#FF3B30] text-xs tracking-widest">
                       預計消耗: {activeModal.node.cost?.sp || 10} 體力
                     </p>
@@ -346,7 +405,7 @@ export default function ExploreView() {
                       離去
                     </button>
                     <button onClick={confirmExecuteNode} className="flex-1 py-2 rounded bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] text-sm tracking-widest shadow-[0_0_10px_rgba(0,229,255,0.2)] hover:bg-[#00E5FF]/20 active:scale-95 transition-all">
-                      探索
+                      {activeModal.node.nodeType === '戰鬥' ? '應戰' : '探索'}
                     </button>
                   </div>
                 </>

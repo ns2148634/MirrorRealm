@@ -88,7 +88,7 @@ export async function performScan(playerId, lat, lng) {
     };
 }
 
-export async function performExecution(playerId, nodeType, nodeName) {
+export async function performExecution(playerId, nodeType, nodeName, stance = 'balanced') {
     // 取得玩家當前狀態（含 last_sync_time，用於 delta flush）
     const playerResult = await db.query(
         `SELECT hp, max_hp, sp, max_sp, ep, max_ep, aura, last_sync_time
@@ -118,8 +118,8 @@ export async function performExecution(playerId, nodeType, nodeName) {
             rewardMessage = `機緣巧合！你在【${nodeName}】深處感受到微弱靈氣，消耗 10 點體力，獲得了 [${itemName}]！`;
         }
     } else if (nodeType === '戰鬥') {
-        // 戰鬥節點委派給完整的回合制戰鬥引擎
-        return await runCombat(playerId);
+        // 戰鬥節點委派給 ATB 時間軸推演引擎，傳入玩家選擇的姿態
+        return await runCombat(playerId, stance);
     } else {
         rewardMessage = `你在【${nodeName}】靜坐片刻，心境似乎有所提升。`;
     }
