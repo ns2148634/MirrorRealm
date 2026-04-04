@@ -1,5 +1,6 @@
 // server/services/playerService.js
 import * as db from '../config/db.js';
+import { calculateOfflineDelta } from '../lib/recovery.js';
 
 export async function getBackpack(playerId) {
     const result = await db.query(
@@ -10,6 +11,7 @@ export async function getBackpack(playerId) {
              i.rarity,
              i.description,
              i.effect_type,
+             i.effect_value,
              pi.quantity
          FROM player_items pi
          JOIN items i ON pi.item_id = i.id
@@ -20,10 +22,46 @@ export async function getBackpack(playerId) {
     return result.rows;
 }
 
-// ── 調息回復 ─────────────────────────────────────────────────
+// ── 取得玩家狀態（純讀，不寫 DB）─────────────────────────────────
+// 為什麼改成純讀：
+//   原本的 GET 會觸發 UPDATE（計算離線回復後寫回 DB），這違反 REST 語義。
+//   在 serverless 環境下，每次讀取都產生一次 DB WRITE，浪費 connection quota。
+//   正確做法：只 SELECT，把 last_sync_time 與 server_time 一起回傳，
+//   讓 client 自己算「顯示用」的動畫起點。
+//   真正的 DB flush 只發生在玩家「做了事」（調息、突破、探索）的 POST API 裡。
+export async function getPlayerStatus(playerId) {
+    const result = await db.query(
+        `SELECT p.*, rt.name AS realm_name
+         FROM players p
+         LEFT JOIN realm_templates rt ON rt.level = p.realm_level
+         WHERE p.id = $1`,
+        [playerId]
+    );
+    if (result.rows.length === 0) throw new Error('找不到道友的命格');
+    const player = result.rows[0];
+
+    // 計算離線 delta（不寫 DB，只用來回傳給 client 做動畫起點）
+    const delta = calculateOfflineDelta(player);
+
+    return {
+        ...player,
+        hp:          delta.hp,
+        sp:          delta.sp,
+        ep:          delta.ep,
+        // aura 不離線回復，維持 DB 裡的值
+        server_time: new Date().toISOString(),
+    };
+}
+
+// ── 調息回復 ─────────────────────────────────────────────────────
+// 為什麼在這裡 flush delta：
+//   玩家按下「調息」時，我們趁機把離線累積的 HP/SP/EP 一起寫回 DB，
+//   同時更新 last_sync_time。這樣 DB 的數值永遠是「上次做事時的狀態」，
+//   而不是「上次定時同步時的狀態」。避免 GET 產生寫入。
 export async function meditate(playerId) {
     const result = await db.query(
-        `SELECT hp, sp, last_meditate_time FROM players WHERE id = $1`,
+        `SELECT hp, max_hp, sp, max_sp, ep, max_ep, aura, last_meditate_time, last_sync_time
+         FROM players WHERE id = $1`,
         [playerId]
     );
     if (result.rows.length === 0) throw new Error('找不到道友的命格');
@@ -40,71 +78,90 @@ export async function meditate(playerId) {
         }
     }
 
-    const newHp = Math.min(100, player.hp + 10);
-    const newSp = Math.min(100, player.sp + 20);
+    // 先 flush 離線 delta，再疊加調息效果
+    const afterDelta = calculateOfflineDelta(player, now);
+    const newHp = Math.min(player.max_hp ?? 100, afterDelta.hp + 10);
+    const newSp = Math.min(player.max_sp ?? 100, afterDelta.sp + 20);
 
     await db.query(
-        `UPDATE players SET hp = $1, sp = $2, last_meditate_time = $3 WHERE id = $4`,
-        [newHp, newSp, now, playerId]
+        `UPDATE players
+         SET hp = $1, sp = $2, ep = $3,
+             last_meditate_time = $4,
+             last_sync_time     = $4
+         WHERE id = $5`,
+        [newHp, newSp, afterDelta.ep, now, playerId]
     );
 
     return {
         hp:          newHp,
         sp:          newSp,
-        hp_restored: newHp - player.hp,
-        sp_restored: newSp - player.sp,
+        ep:          afterDelta.ep,
+        hp_restored: newHp - afterDelta.hp,
+        sp_restored: newSp - afterDelta.sp,
     };
 }
 
-// ── 使用物品 ─────────────────────────────────────────────────
+// ── 使用物品 ─────────────────────────────────────────────────────
 export async function useItem(playerId, itemId) {
-    // 1. 查背包
-    const invResult = await db.query(
-        `SELECT pi.quantity, i.name, i.effect_type, i.effect_value
-         FROM player_items pi
-         JOIN items i ON pi.item_id = i.id
-         WHERE pi.player_id = $1 AND pi.item_id = $2`,
-        [playerId, itemId]
-    );
-    if (invResult.rows.length === 0) throw new Error('背包中沒有此物品');
+    // 1. 背包 + 玩家狀態一次查完（避免 N+1 查詢）
+    const [invResult, playerResult] = await Promise.all([
+        db.query(
+            `SELECT pi.quantity, i.name, i.effect_type, i.effect_value
+             FROM player_items pi
+             JOIN items i ON pi.item_id = i.id
+             WHERE pi.player_id = $1 AND pi.item_id = $2`,
+            [playerId, itemId]
+        ),
+        db.query(
+            `SELECT hp, max_hp, sp, max_sp, ep, max_ep, aura, mind, last_sync_time
+             FROM players WHERE id = $1`,
+            [playerId]
+        ),
+    ]);
 
-    const inv = invResult.rows[0];
-    if (inv.quantity <= 0)    throw new Error('此物品數量不足');
-    if (!inv.effect_type)     throw new Error('此物品無法直接使用');
-
-    // 2. 查玩家當前數值
-    const playerResult = await db.query(
-        `SELECT hp, sp, mind FROM players WHERE id = $1`,
-        [playerId]
-    );
+    if (invResult.rows.length === 0)  throw new Error('背包中沒有此物品');
     if (playerResult.rows.length === 0) throw new Error('找不到道友的命格');
+
+    const inv    = invResult.rows[0];
     const player = playerResult.rows[0];
 
-    // 3. 套用效果
+    if (inv.quantity <= 0) throw new Error('此物品數量不足');
+    if (!inv.effect_type)  throw new Error('此物品無法直接使用');
+
+    // 2. flush 離線 delta，以正確基準套用物品效果
+    const now        = new Date();
+    const afterDelta = calculateOfflineDelta(player, now);
+
+    let newHp   = afterDelta.hp;
+    let newSp   = afterDelta.sp;
+    let newMind = player.mind ?? 0;
     let message = '';
 
     if (inv.effect_type === 'heal_hp') {
-        const newHp      = Math.min(100, player.hp + inv.effect_value);
-        const restored   = newHp - player.hp;
-        await db.query(`UPDATE players SET hp = $1 WHERE id = $2`, [newHp, playerId]);
-        message = `你服用了【${inv.name}】，恢復了 ${restored} 點氣血。`;
+        newHp   = Math.min(player.max_hp ?? 100, afterDelta.hp + (inv.effect_value ?? 0));
+        message = `你服用了【${inv.name}】，恢復了 ${newHp - afterDelta.hp} 點氣血。`;
 
     } else if (inv.effect_type === 'heal_sp') {
-        const newSp      = Math.min(100, player.sp + inv.effect_value);
-        const restored   = newSp - player.sp;
-        await db.query(`UPDATE players SET sp = $1 WHERE id = $2`, [newSp, playerId]);
-        message = `你服用了【${inv.name}】，恢復了 ${restored} 點體力。`;
+        newSp   = Math.min(player.max_sp ?? 100, afterDelta.sp + (inv.effect_value ?? 0));
+        message = `你服用了【${inv.name}】，恢復了 ${newSp - afterDelta.sp} 點體力。`;
 
     } else if (inv.effect_type === 'add_exp') {
-        const newMind    = player.mind + inv.effect_value;
-        await db.query(`UPDATE players SET mind = $1 WHERE id = $2`, [newMind, playerId]);
+        newMind = (player.mind ?? 0) + (inv.effect_value ?? 0);
         message = `你煉化了【${inv.name}】，修為增加了 ${inv.effect_value} 點。`;
 
     } else {
         throw new Error('未知的物品效果類型');
     }
 
-    // 4. 消耗物品 (quantity - 1，歸零則 DELETE)
+    // 3. flush delta + 套用效果 + 更新 last_sync_time（一次 UPDATE）
+    await db.query(
+        `UPDATE players
+         SET hp = $1, sp = $2, ep = $3, mind = $4, last_sync_time = $5
+         WHERE id = $6`,
+        [newHp, newSp, afterDelta.ep, newMind, now, playerId]
+    );
+
+    // 4. 消耗物品
     if (inv.quantity === 1) {
         await db.query(
             `DELETE FROM player_items WHERE player_id = $1 AND item_id = $2`,
@@ -118,50 +175,20 @@ export async function useItem(playerId, itemId) {
         );
     }
 
-    return { message };
+    return { message, hp: newHp, sp: newSp, ep: afterDelta.ep, mind: newMind };
 }
 
-// ── 取得玩家狀態（含離線回復計算）─────────────────────────────
-export async function getPlayerStatus(playerId) {
-    const result = await db.query(
-        `SELECT p.*, rt.name AS realm_name
-         FROM players p
-         LEFT JOIN realm_templates rt ON rt.level = p.realm_level
-         WHERE p.id = $1`,
-        [playerId]
-    );
-    if (result.rows.length === 0) throw new Error('找不到道友的命格');
-    const player = result.rows[0];
-
-    const now        = new Date();
-    const lastSync   = player.last_sync_time ? new Date(player.last_sync_time) : now;
-    const elapsedMin = Math.max(0, Math.floor((now - lastSync) / 60000));
-
-    // 離線回復：SP +1/min、EP +1/min、HP +1/3min
-    const newSp = Math.min(player.max_sp ?? 100, (player.sp ?? 0) + elapsedMin);
-    const newEp = Math.min(player.max_ep ?? 100, (player.ep ?? 0) + elapsedMin);
-    const newHp = Math.min(player.max_hp ?? 100, (player.hp ?? 0) + Math.floor(elapsedMin / 3));
-
-    await db.query(
-        `UPDATE players SET sp = $1, ep = $2, hp = $3, last_sync_time = $4 WHERE id = $5`,
-        [newSp, newEp, newHp, now, playerId]
-    );
-
-    return { ...player, sp: newSp, ep: newEp, hp: newHp, last_sync_time: now };
-}
-
-// ── 境界突破 ─────────────────────────────────────────────────
+// ── 境界突破 ─────────────────────────────────────────────────────
 export async function breakthrough(playerId) {
-    // 1. 讀取玩家當前屬性
     const playerResult = await db.query(
-        `SELECT realm_level, aura, max_aura, max_hp, max_sp, attack, defense
+        `SELECT realm_level, aura, max_aura, hp, max_hp, sp, max_sp,
+                ep, max_ep, attack, defense, last_sync_time
          FROM players WHERE id = $1`,
         [playerId]
     );
     if (playerResult.rows.length === 0) throw new Error('找不到道友的命格');
     const player = playerResult.rows[0];
 
-    // 2. 查詢下一個境界模板
     const nextLevel = player.realm_level + 1;
     const templateResult = await db.query(
         `SELECT * FROM realm_templates WHERE level = $1`,
@@ -172,33 +199,38 @@ export async function breakthrough(playerId) {
     }
     const nextRealm = templateResult.rows[0];
 
-    // 3. 周天靈氣須達上限才可突破
     if (player.aura < (player.max_aura ?? 120)) {
         const gap = (player.max_aura ?? 120) - player.aura;
         throw new Error(`周天靈氣尚未圓滿，強行突破恐會走火入魔（還差 ${gap} 點）`);
     }
 
-    // 4. Transaction：提升境界、更新屬性、補滿 HP / SP
+    // flush 離線 delta
+    const now        = new Date();
+    const afterDelta = calculateOfflineDelta(player, now);
+
+    const newMaxHp   = (player.max_hp   ?? 100) + (nextRealm.bonus_max_hp  ?? 0);
+    const newMaxSp   = (player.max_sp   ?? 100) + (nextRealm.bonus_max_sp  ?? 0);
+    const newAttack  = (player.attack   ?? 10)  + (nextRealm.bonus_attack  ?? 0);
+    const newDefense = (player.defense  ?? 5)   + (nextRealm.bonus_defense ?? 0);
+
     const client = await db.getClient();
     try {
         await client.query('BEGIN');
 
-        const newMaxHp   = player.max_hp   + nextRealm.bonus_max_hp;
-        const newMaxSp   = player.max_sp   + nextRealm.bonus_max_sp;
-        const newAttack  = player.attack   + nextRealm.bonus_attack;
-        const newDefense = player.defense  + nextRealm.bonus_defense;
-
         await client.query(
             `UPDATE players
-             SET realm_level = $1,
-                 max_hp      = $2,
-                 max_sp      = $3,
-                 hp          = $2,
-                 sp          = $3,
-                 attack      = $4,
-                 defense     = $5
-             WHERE id = $6`,
-            [nextLevel, newMaxHp, newMaxSp, newAttack, newDefense, playerId]
+             SET realm_level    = $1,
+                 max_hp         = $2,
+                 max_sp         = $3,
+                 hp             = $2,
+                 sp             = $3,
+                 ep             = $4,
+                 attack         = $5,
+                 defense        = $6,
+                 aura           = 0,
+                 last_sync_time = $7
+             WHERE id = $8`,
+            [nextLevel, newMaxHp, newMaxSp, afterDelta.ep, newAttack, newDefense, now, playerId]
         );
 
         await client.query('COMMIT');
@@ -210,8 +242,10 @@ export async function breakthrough(playerId) {
             max_sp:      newMaxSp,
             hp:          newMaxHp,
             sp:          newMaxSp,
+            ep:          afterDelta.ep,
             attack:      newAttack,
             defense:     newDefense,
+            aura:        0,
         };
     } catch (e) {
         await client.query('ROLLBACK');
@@ -221,7 +255,7 @@ export async function breakthrough(playerId) {
     }
 }
 
-// ── 取得裝備清單 ──────────────────────────────────────────────
+// ── 取得裝備清單 ──────────────────────────────────────────────────
 export async function getEquipment(playerId) {
     const result = await db.query(
         `SELECT pe.slot, pe.item_id, i.name, i.rarity, i.stat_bonus
@@ -233,9 +267,8 @@ export async function getEquipment(playerId) {
     return result.rows;
 }
 
-// ── 裝備道具 ─────────────────────────────────────────────────
+// ── 裝備道具 ─────────────────────────────────────────────────────
 export async function equipItem(playerId, itemId) {
-    // 1. 確認道具在背包中且具有裝備槽
     const invResult = await db.query(
         `SELECT pi.quantity, i.name, i.equip_slot, i.stat_bonus
          FROM player_items pi
@@ -247,7 +280,6 @@ export async function equipItem(playerId, itemId) {
     const item = invResult.rows[0];
     if (!item.equip_slot) throw new Error('此道具無法裝備');
 
-    // 2. 查詢同槽位舊裝備（計算 delta 用）
     const slotResult = await db.query(
         `SELECT i.stat_bonus
          FROM player_equipment pe
@@ -261,7 +293,6 @@ export async function equipItem(playerId, itemId) {
     const attackDelta  = (newBonus.attack  ?? 0) - (oldBonus.attack  ?? 0);
     const defenseDelta = (newBonus.defense ?? 0) - (oldBonus.defense ?? 0);
 
-    // 3. Transaction：UPSERT 裝備槽 + 更新玩家屬性
     const client = await db.getClient();
     try {
         await client.query('BEGIN');
@@ -300,9 +331,8 @@ export async function equipItem(playerId, itemId) {
     }
 }
 
-// ── 卸除裝備 ─────────────────────────────────────────────────
+// ── 卸除裝備 ─────────────────────────────────────────────────────
 export async function unequipItem(playerId, slot) {
-    // 1. 查詢目前槽位的裝備
     const slotResult = await db.query(
         `SELECT pe.item_id, i.name, i.stat_bonus
          FROM player_equipment pe
@@ -314,7 +344,6 @@ export async function unequipItem(playerId, slot) {
     const equipped = slotResult.rows[0];
     const bonus    = equipped.stat_bonus ?? {};
 
-    // 2. Transaction：刪除裝備槽 + 還原玩家屬性（GREATEST 防負值）
     const client = await db.getClient();
     try {
         await client.query('BEGIN');

@@ -2,8 +2,7 @@ import { create } from 'zustand';
 import { supabase } from '../lib/supabase.js';
 
 // interval 存在 store 外部，避免被 Zustand 序列化
-let recoveryInterval  = null;
-let recoverySeconds   = 0;
+let recoveryInterval = null;
 
 // 每種屬性每分鐘回復量（可集中調整）
 // aura（周天靈氣）= 1/8 per min（即每 8 分鐘 +1，需習得引氣入體功法後生效）
@@ -155,21 +154,28 @@ const useGameStore = create((set, get) => ({
     }
   },
 
-  // ── 在線回復（每秒 tick，用累加器平滑顯示，每 5 分鐘同步伺服器）──
+  // ── 在線回復（純 UI 動畫計時器）──────────────────────────────────
+  // 為什麼移除 5 分鐘自動 sync：
+  //   原本每 5 分鐘會主動呼叫 GET /api/player/:id，而那個 GET 會觸發 DB WRITE
+  //   （計算 offline recovery 後 UPDATE）。這在 serverless 環境產生大量不必要的
+  //   DB 寫入，且 GET 有副作用違反 REST 語義。
+  //
+  //   新設計：
+  //   - setInterval 只負責讓畫面上的數字每秒增加（純 UI 動畫）
+  //   - DB 的 flush 只發生在玩家做事時（調息/突破/探索），那些 POST 回傳
+  //     authoritative 數值，client 用回傳值更新 store
+  //   - 玩家做任何動作後收到的 response 才是 source of truth
   startOnlineRecovery: () => {
     if (recoveryInterval) clearInterval(recoveryInterval);
-    recoverySeconds = 0;
     acc.hp = acc.sp = acc.ep = acc.aura = 0;
 
     recoveryInterval = setInterval(() => {
-      recoverySeconds++;
-
       set((state) => {
         if (!state.player) return {};
         const p    = state.player;
-        const mult = state.isMeditating ? 3 : 1; // 定神調息時 hp/sp/ep 回復 3x
+        const mult = state.isMeditating ? 3 : 1; // 定神調息時 hp/sp/ep 動畫加速 3x
 
-        // 每秒累加（定神調息期間 hp/sp/ep 加速，aura 固定速率且上限封頂不再累加）
+        // 每秒累加（純顯示用，不寫 DB）
         acc.hp   += REGEN_PER_MIN.hp   / 60 * mult;
         acc.sp   += REGEN_PER_MIN.sp   / 60 * mult;
         acc.ep   += REGEN_PER_MIN.ep   / 60 * mult;
@@ -177,7 +183,7 @@ const useGameStore = create((set, get) => ({
         if ((p.aura ?? 0) < maxAura) {
           acc.aura += REGEN_PER_MIN.aura / 60;
         } else {
-          acc.aura = 0; // 已達上限，清空累加器
+          acc.aura = 0;
         }
 
         const hpGain   = Math.floor(acc.hp);
@@ -200,11 +206,6 @@ const useGameStore = create((set, get) => ({
           },
         };
       });
-
-      // 每 5 分鐘（300 秒）與伺服器同步一次
-      if (recoverySeconds % 300 === 0) {
-        get().fetchPlayerStatus();
-      }
     }, 1000);
   },
 
@@ -214,7 +215,6 @@ const useGameStore = create((set, get) => ({
       clearInterval(recoveryInterval);
       recoveryInterval = null;
     }
-    recoverySeconds = 0;
   },
 
   // ── 登出 ─────────────────────────────────────────────────────
