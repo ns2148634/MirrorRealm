@@ -99,19 +99,33 @@ export default function AuthScreen() {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     if (!clientId) return;
 
-    const initGSI = () => {
+    // 產生 raw nonce（16 bytes hex）並計算 SHA-256 hashed nonce 給 GSI
+    let rawNonce = '';
+    const generateNonce = async () => {
+      const arr = new Uint8Array(16);
+      crypto.getRandomValues(arr);
+      rawNonce = Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+      const encoded = new TextEncoder().encode(rawNonce);
+      const hashBuf = await crypto.subtle.digest('SHA-256', encoded);
+      return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    };
+
+    const initGSI = async () => {
       if (!window.google?.accounts?.id) {
         setTimeout(initGSI, 300);
         return;
       }
+      const hashedNonce = await generateNonce();
+
       window.google.accounts.id.initialize({
         client_id:            clientId,
+        nonce:                hashedNonce, // GSI 傳 hashed nonce 進 id_token
         auto_select:          true,
         cancel_on_tap_outside: false,
         callback: async ({ credential }) => {
           setLoading(true);
           setMessage('天道認證中…');
-          const r = await loginWithGoogleOneTap(credential);
+          const r = await loginWithGoogleOneTap(credential, rawNonce); // Supabase 傳 raw nonce
           if (!r.success) {
             setLoading(false);
             setMessage(r.error ?? '連線失敗，請稍後再試');
