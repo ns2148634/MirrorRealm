@@ -1,8 +1,7 @@
 // src/views/ExploreView.jsx
 import { useState, useRef, useEffect } from 'react';
-import maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import useGameStore from '../store/gameStore';
+// maplibre-gl 改為動態載入：避免手機瀏覽器 WebGL2 初始化失敗時崩潰整個 app
 
 // 非戰鬥節點探索結果顏色（戰鬥結果由全域 CombatModal 顯示）
 const LOG_LINE_COLOR = {
@@ -93,29 +92,43 @@ export default function ExploreView() {
     return () => { setMeditating(false); };
   }, []);
 
-  // ── MapLibre 初始化 ──────────────────────────────────────────────────
+  // ── MapLibre 初始化（動態 import，避免手機 WebGL2 失敗崩潰）──────
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
+    let cancelled = false;
 
-    const map = new maplibregl.Map({
-      container:   mapContainerRef.current,
-      style:       MAP_STYLE,
-      center:      [121.5654, 25.0330], // 預設台北；GPS 到後會置中
-      zoom:        17,
-      interactive: false, // 鎖定，不允許玩家拖動
-      attributionControl: false,
+    Promise.all([
+      import('maplibre-gl'),
+      import('maplibre-gl/dist/maplibre-gl.css'),
+    ]).then(([{ default: maplibregl }]) => {
+      if (cancelled || !mapContainerRef.current) return;
+
+      const map = new maplibregl.Map({
+        container:        mapContainerRef.current,
+        style:            MAP_STYLE,
+        center:           [121.5654, 25.0330],
+        zoom:             17,
+        interactive:      false,
+        attributionControl: false,
+      });
+
+      map.on('load', () => {
+        const canvas = mapContainerRef.current?.querySelector('canvas');
+        if (canvas) {
+          canvas.style.filter = 'grayscale(1) invert(1) brightness(0.20) contrast(1.3) sepia(0.3)';
+        }
+      });
+
+      mapRef.current = map;
+    }).catch((err) => {
+      // WebGL2 不支援或其他載入錯誤 → 靜默略過，地圖不顯示但 app 正常運作
+      console.warn('[ExploreView] MapLibre 載入失敗，略過地圖底圖:', err.message);
     });
 
-    map.on('load', () => {
-      // 深色化 + 隱藏標籤：用 CSS filter 讓地圖呈現「暗色街道形狀」
-      const canvas = mapContainerRef.current?.querySelector('canvas');
-      if (canvas) {
-        canvas.style.filter = 'grayscale(1) invert(1) brightness(0.20) contrast(1.3) sepia(0.3)';
-      }
-    });
-
-    mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
+    return () => {
+      cancelled = true;
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+    };
   }, []);
 
   // GPS 到後置中地圖
