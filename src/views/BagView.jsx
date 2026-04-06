@@ -6,12 +6,13 @@ import useGameStore from '../store/gameStore';
 // 設定
 // ==========================================
 const TABS = [
-  { id: 'material', label: '素材', color: '#E2E8F0', pos: { top: '22%', left: '25%' }, delay: '0s' },
-  { id: 'artifact', label: '法器', color: '#00E5FF', pos: { top: '15%', left: '75%' }, delay: '1.2s' },
-  { id: 'pill',     label: '丹藥', color: '#32D74B', pos: { top: '50%', left: '18%' }, delay: '2.5s' },
-  { id: 'talisman', label: '符籙', color: '#9B5CFF', pos: { top: '45%', left: '82%' }, delay: '0.8s' },
-  { id: 'puppet',   label: '傀儡', color: '#FF3B30', pos: { top: '78%', left: '30%' }, delay: '3.1s' },
-  { id: 'pet',      label: '靈獸', color: '#FFD700', pos: { top: '72%', left: '72%' }, delay: '1.7s' },
+  { id: 'material', label: '素材',   color: '#E2E8F0', pos: { top: '18%', left: '25%' }, delay: '0s'   },
+  { id: 'artifact', label: '法器',   color: '#00E5FF', pos: { top: '12%', left: '75%' }, delay: '1.2s' },
+  { id: 'pill',     label: '丹藥',   color: '#32D74B', pos: { top: '45%', left: '15%' }, delay: '2.5s' },
+  { id: 'talisman', label: '符籙',   color: '#9B5CFF', pos: { top: '42%', left: '85%' }, delay: '0.8s' },
+  { id: 'puppet',   label: '傀儡',   color: '#FF3B30', pos: { top: '70%', left: '25%' }, delay: '3.1s' },
+  { id: 'pet',      label: '靈獸',   color: '#FFD700', pos: { top: '65%', left: '72%' }, delay: '1.7s' },
+  { id: 'furnace',  label: '天地熔爐', color: '#FF9500', pos: { top: '88%', left: '50%' }, delay: '2.0s' },
 ];
 
 const RARITY_COLORS = {
@@ -36,11 +37,11 @@ const ITEM_TYPE_TO_TAB = {
   '靈獸':  'pet',
 };
 
-const EMPTY_INVENTORY = { material: [], artifact: [], pill: [], talisman: [], puppet: [], pet: [] };
+const EMPTY_INVENTORY = { material: [], artifact: [], pill: [], talisman: [], puppet: [], pet: [], furnace: [] };
 const TOTAL_SLOTS = 24;
 
 function transformInventory(apiItems) {
-  const result = { material: [], artifact: [], pill: [], talisman: [], puppet: [], pet: [] };
+  const result = { material: [], artifact: [], pill: [], talisman: [], puppet: [], pet: [], furnace: [] };
   for (const item of apiItems) {
     const tabId = ITEM_TYPE_TO_TAB[item.item_type] ?? 'material';
     result[tabId].push({
@@ -193,50 +194,8 @@ export default function BagView() {
   const showL2 = ['detail', 'entering', 'exiting', 'entering-item', 'exiting-item'].includes(viewState);
   const showL3 = ['item-detail', 'entering-item', 'exiting-item'].includes(viewState);
 
-  const spiritStones = player?.spirit_stones ?? 0;
-  const silver       = player?.silver       ?? 0;
-
   return (
     <div className="h-full w-full relative flex flex-col bg-transparent overflow-hidden text-white font-serif z-10 pt-[5cqw]">
-
-      {/* ── 財富區塊 ─────────────────────────────────────────────── */}
-      <div
-        className="relative z-50 mx-[4cqw] mb-[2cqw] rounded-xl px-5 py-2.5 flex items-center justify-between shrink-0"
-        style={{
-          background:     'rgba(0,0,0,0.4)',
-          backdropFilter: 'blur(12px)',
-          border:         '1px solid rgba(255,255,255,0.07)',
-        }}
-      >
-        {/* 靈石 */}
-        <div className="flex items-center gap-2">
-          <span
-            className="text-[11px] tracking-widest opacity-60"
-          >
-            靈石
-          </span>
-          <span
-            className="font-mono text-[15px] tracking-wider font-semibold"
-            style={{ color: '#00E5FF', textShadow: '0 0 10px rgba(0,229,255,0.5)' }}
-          >
-            {spiritStones.toLocaleString()}
-          </span>
-        </div>
-
-        {/* 分隔線 */}
-        <div className="w-[1px] h-4 bg-white/15 mx-2" />
-
-        {/* 銀兩 */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] tracking-widest opacity-60">銀兩</span>
-          <span
-            className="font-mono text-[15px] tracking-wider font-semibold"
-            style={{ color: '#CBD5E1' }}
-          >
-            {silver.toLocaleString()}
-          </span>
-        </div>
-      </div>
 
       {/* 動畫 */}
       <style>{`

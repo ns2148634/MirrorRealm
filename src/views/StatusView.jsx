@@ -199,16 +199,6 @@ export default function StatusView() {
         <div className="fixed inset-0 z-[100] bg-white/30 backdrop-blur-sm pointer-events-none animate-ping" />
       )}
 
-      {/* ── 天機（設定）按鈕 ─────────────────────────────────────── */}
-      <button
-        onClick={() => { setShowSettings(true); setConfirmAction(null); setSettingsMsg(''); }}
-        className="absolute top-4 right-4 z-20 flex flex-col gap-[5px] p-2 opacity-60 hover:opacity-100 transition-opacity"
-        aria-label="天機"
-      >
-        <span className="block w-[22px] h-[2px] bg-white/80 rounded-full" />
-        <span className="block w-[22px] h-[2px] bg-white/80 rounded-full" />
-        <span className="block w-[22px] h-[2px] bg-white/80 rounded-full" />
-      </button>
 
       {/* ── 靈根陣盤 ─────────────────────────────────────── */}
       <div className="relative w-full max-w-[320px] flex-shrink-0 flex flex-col items-center justify-center" style={{ height: '38vh' }}>
@@ -288,29 +278,6 @@ export default function StatusView() {
             </span>
           </div>
 
-          <div className="w-full h-[1px] bg-white/5 my-1" />
-
-          {/* 靈石 */}
-          <div className="flex justify-between items-end w-full">
-            <span className="opacity-60 text-[clamp(13px,4cqw,16px)] tracking-[0.4em]">靈石</span>
-            <span
-              className="font-mono text-[clamp(14px,4.5cqw,18px)] tracking-wider drop-shadow-sm"
-              style={{ color: '#00E5FF', textShadow: '0 0 8px rgba(0,229,255,0.4)' }}
-            >
-              {(player.spirit_stones ?? 0).toLocaleString()}
-            </span>
-          </div>
-
-          {/* 銀兩 */}
-          <div className="flex justify-between items-end w-full">
-            <span className="opacity-60 text-[clamp(13px,4cqw,16px)] tracking-[0.4em]">銀兩</span>
-            <span
-              className="font-mono text-[clamp(14px,4.5cqw,18px)] tracking-wider drop-shadow-sm"
-              style={{ color: '#CBD5E1' }}
-            >
-              {(player.silver ?? 0).toLocaleString()}
-            </span>
-          </div>
         </div>
       </div>
 

@@ -6,11 +6,11 @@ import useGameStore from '../store/gameStore';
 // 大千世界：五大系統節點
 // ==========================================
 const TABS = [
-  { id: 'market', label: '市場', color: '#FFD700', pos: { top: '25%', left: '25%' }, delay: '0s' },      // 左上
-  { id: 'bounty', label: '懸賞', color: '#FF3B30', pos: { top: '20%', left: '75%' }, delay: '1.2s' },    // 右上
-  { id: 'friend', label: '道友', color: '#32D74B', pos: { top: '50%', left: '50%' }, delay: '2.5s' },    // 正中
-  { id: 'sect', label: '宗門', color: '#00E5FF', pos: { top: '75%', left: '25%' }, delay: '0.8s' },      // 左下
-  { id: 'furnace', label: '天地熔爐', color: '#FF9500', pos: { top: '80%', left: '75%' }, delay: '1.7s' }, // 右下
+  { id: 'market',   label: '市場', color: '#FFD700', pos: { top: '25%', left: '25%' }, delay: '0s'   }, // 左上
+  { id: 'bounty',   label: '懸賞', color: '#FF3B30', pos: { top: '20%', left: '75%' }, delay: '1.2s' }, // 右上
+  { id: 'friend',   label: '道友', color: '#32D74B', pos: { top: '50%', left: '50%' }, delay: '2.5s' }, // 正中
+  { id: 'sect',     label: '宗門', color: '#00E5FF', pos: { top: '75%', left: '25%' }, delay: '0.8s' }, // 左下
+  { id: 'settings', label: '天機', color: '#9B5CFF', pos: { top: '80%', left: '75%' }, delay: '1.7s' }, // 右下
 ];
 
 // 沿用修仙界品階顏色
@@ -52,23 +52,57 @@ const MOCK_WORLD_DATA = {
 };
 
 export default function WorldView() {
-  const player = useGameStore((s) => s.player);
-  const [viewState, setViewState] = useState('overview');
-  const [activeTab, setActiveTab] = useState('market');
-  const [selectedItem, setSelectedItem] = useState(null);
-
-  const spiritStones = player?.spirit_stones ?? 0;
-  const silver       = player?.silver       ?? 0;
+  const player   = useGameStore((s) => s.player);
+  const signOut  = useGameStore((s) => s.signOut);
+  const [viewState,     setViewState]     = useState('overview');
+  const [activeTab,     setActiveTab]     = useState('market');
+  const [selectedItem,  setSelectedItem]  = useState(null);
+  const [showSettings,  setShowSettings]  = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [settingsMsg,   setSettingsMsg]   = useState('');
 
   const triggerHaptic = (pattern) => {
     if (navigator.vibrate) navigator.vibrate(pattern);
   };
 
+  // ── 天機：刪除帳號 ──────────────────────────────────────────────
+  const handleDeleteAccount = async () => {
+    setSettingsMsg('');
+    try {
+      const res = await fetch('/api/auth/delete', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: player.id }),
+      });
+      const result = await res.json();
+      if (!res.ok) { setSettingsMsg(result.message ?? '刪除失敗'); return; }
+      await signOut();
+    } catch { setSettingsMsg('刪除失敗，請稍後再試'); }
+  };
+
+  // ── 天機：重生 ──────────────────────────────────────────────────
+  const handleReborn = async () => {
+    setSettingsMsg('');
+    try {
+      const res = await fetch('/api/player/reborn', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: player.id }),
+      });
+      const result = await res.json();
+      if (!res.ok) { setSettingsMsg(result.message ?? '重生失敗'); return; }
+      await signOut();
+    } catch { setSettingsMsg('重生失敗，請稍後再試'); }
+  };
+
   const handleEnterCategory = (tabId) => {
+    if (tabId === 'settings') {
+      setConfirmAction(null); setSettingsMsg('');
+      setShowSettings(true);
+      return;
+    }
     triggerHaptic([20, 30]);
     setActiveTab(tabId);
-    setViewState('entering'); 
-    setTimeout(() => setViewState('detail'), 400); 
+    setViewState('entering');
+    setTimeout(() => setViewState('detail'), 400);
   };
 
   const handleReturnOverview = () => {
@@ -110,29 +144,6 @@ export default function WorldView() {
   return (
     <div className="h-full w-full relative flex flex-col bg-transparent overflow-hidden text-white font-serif z-10 pt-[5cqw]">
 
-      {/* ── 右上角餘額（懸浮極簡風） ────────────────────────────── */}
-      <div className="absolute top-4 right-4 z-50 flex flex-col items-end gap-1 pointer-events-none">
-        <div
-          className="flex items-center gap-1.5 font-mono text-[13px] tracking-wider"
-          style={{
-            color:  '#00E5FF',
-            filter: 'drop-shadow(0 1px 6px rgba(0,229,255,0.6))',
-          }}
-        >
-          <span className="text-[10px] opacity-70 font-serif tracking-widest">靈石</span>
-          {spiritStones.toLocaleString()}
-        </div>
-        <div
-          className="flex items-center gap-1.5 font-mono text-[13px] tracking-wider"
-          style={{
-            color:  '#CBD5E1',
-            filter: 'drop-shadow(0 1px 4px rgba(203,213,225,0.4))',
-          }}
-        >
-          <span className="text-[10px] opacity-70 font-serif tracking-widest">銀兩</span>
-          {silver.toLocaleString()}
-        </div>
-      </div>
 
       {/* 空間穿梭動畫法則 */}
       <style>{`
@@ -346,6 +357,95 @@ export default function WorldView() {
               </button>
             </div>
             
+          </div>
+        </div>
+      )}
+
+      {/* ── 天機設定 Modal ────────────────────────────────────────── */}
+      {showSettings && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowSettings(false); }}
+        >
+          <div
+            className="w-full max-w-[320px] mx-4 flex flex-col gap-3 px-6 py-8"
+            style={{
+              background: 'rgba(10,12,18,0.92)',
+              border: '1px solid rgba(155,92,255,0.25)',
+              borderRadius: '1rem',
+              boxShadow: '0 0 40px rgba(155,92,255,0.1)',
+            }}
+          >
+            <div className="text-center mb-2">
+              <div className="text-[18px] tracking-[0.5em] font-serif text-white/80">天　機</div>
+              <div className="w-12 h-[1px] bg-[#9B5CFF]/40 mx-auto mt-2" />
+            </div>
+
+            {!confirmAction && (
+              <>
+                <button
+                  onClick={async () => { setShowSettings(false); await signOut(); }}
+                  className="w-full py-3 rounded-lg text-[15px] tracking-[0.3em] font-serif transition-all active:scale-95"
+                  style={{ background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.25)', color: 'rgba(200,240,255,0.8)' }}
+                >
+                  離開仙途（登出）
+                </button>
+                <button
+                  onClick={() => setConfirmAction('reborn')}
+                  className="w-full py-3 rounded-lg text-[15px] tracking-[0.3em] font-serif transition-all active:scale-95"
+                  style={{ background: 'rgba(255,140,0,0.06)', border: '1px solid rgba(255,140,0,0.3)', color: 'rgba(255,180,80,0.85)' }}
+                >
+                  輪迴重生（重置角色）
+                </button>
+                <button
+                  onClick={() => setConfirmAction('delete')}
+                  className="w-full py-3 rounded-lg text-[15px] tracking-[0.3em] font-serif transition-all active:scale-95"
+                  style={{ background: 'rgba(255,59,48,0.06)', border: '1px solid rgba(255,59,48,0.3)', color: 'rgba(255,100,90,0.85)' }}
+                >
+                  道消形滅（刪除帳號）
+                </button>
+                {settingsMsg && <p className="text-center text-[13px] text-red-400 tracking-wider">{settingsMsg}</p>}
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="mt-2 w-full py-2 text-[13px] tracking-[0.3em] font-serif text-white/30 hover:text-white/60 transition-colors"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  返回
+                </button>
+              </>
+            )}
+
+            {confirmAction === 'reborn' && (
+              <>
+                <p className="text-center text-[14px] tracking-wider font-serif text-white/70 leading-relaxed">
+                  輪迴重生將清除所有修為與角色資料，<br />重新踏上仙途。
+                  <br /><span className="text-orange-400/80">此操作無法復原。</span>
+                </p>
+                <button
+                  onClick={handleReborn}
+                  className="w-full py-3 rounded-lg text-[15px] tracking-[0.3em] font-serif active:scale-95"
+                  style={{ background: 'rgba(255,140,0,0.15)', border: '1px solid rgba(255,140,0,0.5)', color: '#FFAA40' }}
+                >確認重生</button>
+                {settingsMsg && <p className="text-center text-[13px] text-red-400 tracking-wider">{settingsMsg}</p>}
+                <button onClick={() => setConfirmAction(null)} className="w-full py-2 text-[13px] tracking-[0.3em] font-serif text-white/30" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>取消</button>
+              </>
+            )}
+
+            {confirmAction === 'delete' && (
+              <>
+                <p className="text-center text-[14px] tracking-wider font-serif text-white/70 leading-relaxed">
+                  道消形滅將永久刪除帳號與所有資料，<br />
+                  <span className="text-red-400/80">此操作無法復原。</span>
+                </p>
+                <button
+                  onClick={handleDeleteAccount}
+                  className="w-full py-3 rounded-lg text-[15px] tracking-[0.3em] font-serif active:scale-95"
+                  style={{ background: 'rgba(255,59,48,0.15)', border: '1px solid rgba(255,59,48,0.5)', color: '#FF6B6B' }}
+                >確認刪除</button>
+                {settingsMsg && <p className="text-center text-[13px] text-red-400 tracking-wider">{settingsMsg}</p>}
+                <button onClick={() => setConfirmAction(null)} className="w-full py-2 text-[13px] tracking-[0.3em] font-serif text-white/30" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>取消</button>
+              </>
+            )}
           </div>
         </div>
       )}
