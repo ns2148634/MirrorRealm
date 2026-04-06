@@ -1,5 +1,5 @@
 /**
- * AuthScreen.jsx — 《鏡界》動態星斗演算 + 法器啟動爆發 + 無密碼登入 + 創角
+ * AuthScreen.jsx — 《鏡界》動態星斗演算 + 法器啟動爆發 + Google / Email 雙登入 + 創角
  */
 import { useState, useEffect, useRef } from 'react';
 import useGameStore from '../store/gameStore';
@@ -16,10 +16,8 @@ export default function AuthScreen({ onLogin }) {
   // Phase 狀態機: 'waiting' -> 'stars' -> 'login' -> 'create'
   const [phase, setPhase] = useState('waiting');
   
-  // 🌟 控制全螢幕「法器啟動」閃耀的狀態
+  // 動畫與特效狀態
   const [isFlashing, setIsFlashing] = useState(false);
-
-  // 🌟 動態星斗資料
   const [stars, setStars] = useState([]);
   const [edges, setEdges] = useState([]);
 
@@ -27,6 +25,11 @@ export default function AuthScreen({ onLogin }) {
   const [name, setName] = useState('');
   const [gender, setGender] = useState('保密');
   const [message, setMessage] = useState('');
+  
+  // Email 登入狀態 ('input' | 'otp')
+  const [emailStep, setEmailStep] = useState('input');
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
   
   // DOM Refs
   const titleRef = useRef(null);
@@ -40,12 +43,10 @@ export default function AuthScreen({ onLogin }) {
   // 1. 動態演算星斗與時序控制
   // =========================================================================
   useEffect(() => {
-    // 演算隨機星斗座標 (7~9顆星)
     const numStars = 7 + Math.floor(Math.random() * 3);
     const newStars = [];
     const newEdges = [];
 
-    // 計算 X 軸分段，確保星星從左蔓延到右
     const stepX = 260 / (numStars - 1); 
     for (let i = 0; i < numStars; i++) {
       const x = 30 + (i * stepX) + (Math.random() * 20 - 10);
@@ -53,12 +54,10 @@ export default function AuthScreen({ onLogin }) {
       newStars.push({ x, y });
     }
 
-    // 計算星軌連線 (基本主線)
     for (let i = 0; i < numStars - 1; i++) {
       newEdges.push([i, i + 1]);
     }
 
-    // 計算分支星軌 (隨機產生 1~2 條跨星連線，更像真實星座)
     const extraEdges = Math.floor(Math.random() * 2) + 1;
     for (let i = 0; i < extraEdges; i++) {
       const from = Math.floor(Math.random() * (numStars - 2));
@@ -71,27 +70,19 @@ export default function AuthScreen({ onLogin }) {
     setStars(newStars);
     setEdges(newEdges);
 
-    // 確認字體載入後開始動畫
     document.fonts.ready.then(() => {
       setPhase('stars');
 
-      // 根據星星與連線數量計算總時長
       const totalDur = newStars.length * STAR_DUR + newEdges.length * LINE_DUR + LINE_LAG;
 
-      // 🌟 時序 1：陣法啟動，全螢幕爆發青藍靈光
-      const flashTimer = setTimeout(() => {
-        setIsFlashing(true);
-      }, totalDur * 1000 + 200);
+      // 時序 1：陣法啟動爆發
+      const flashTimer = setTimeout(() => setIsFlashing(true), totalDur * 1000 + 200);
 
-      // 🌟 時序 2：光芒最盛時，偷偷把背景切換成登入介面
-      const loginTimer = setTimeout(() => {
-        setPhase('login');
-      }, totalDur * 1000 + 700);
+      // 時序 2：切換至登入
+      const loginTimer = setTimeout(() => setPhase('login'), totalDur * 1000 + 700);
 
-      // 🌟 時序 3：靈光褪去，登入大門浮現
-      const fadeTimer = setTimeout(() => {
-        setIsFlashing(false);
-      }, totalDur * 1000 + 1200);
+      // 時序 3：靈光消散
+      const fadeTimer = setTimeout(() => setIsFlashing(false), totalDur * 1000 + 1200);
 
       return () => {
         clearTimeout(flashTimer);
@@ -106,7 +97,6 @@ export default function AuthScreen({ onLogin }) {
   // =========================================================================
   useEffect(() => {
     if (phase === 'login' && titleRef.current && subtitleRef.current && loginFormRef.current) {
-      // 標題與登入區塊淡入
       titleRef.current.style.opacity = '1';
       titleRef.current.style.transform = 'translateY(0) scale(1)';
       subtitleRef.current.style.opacity = '1';
@@ -119,7 +109,6 @@ export default function AuthScreen({ onLogin }) {
         }
       }, 400);
 
-      // 初始化 Google One Tap (如果 Phase 是 login 且有 Client ID)
       if (googleClientId && window.google) {
         window.google.accounts.id.initialize({
           client_id: googleClientId,
@@ -127,14 +116,16 @@ export default function AuthScreen({ onLogin }) {
           auto_select: false,
           cancel_on_tap_outside: false
         });
-        window.google.accounts.id.prompt(); 
+        // 隱藏原生按鈕，綁定到自訂按鈕
       }
     }
   }, [phase, googleClientId]);
 
   // =========================================================================
-  // 3. 登入邏輯處理
+  // 3. 登入邏輯處理 (Google & Email & Sync)
   // =========================================================================
+  
+  // ── A. Google 登入 ──
   const handleGoogleCredentialResponse = async (response) => {
     try {
       setMessage('天道認證中...');
@@ -150,11 +141,55 @@ export default function AuthScreen({ onLogin }) {
       localStorage.setItem('mirrorrealm_session', sessionStr);
       await syncWithServer(data.user.id);
     } catch (err) {
-      console.error('Google登入錯誤:', err);
       setMessage(err.message);
     }
   };
 
+  // ── B. Email 登入 (飛劍傳書) ──
+  const handleSendOTP = async () => {
+    if (!email || !email.includes('@')) {
+      setMessage('信箱格式有誤');
+      return;
+    }
+    setMessage('發送飛劍傳書中...');
+    try {
+      // ⚠️ 這裡請替換為你實際使用的 Supabase 或 Firebase OTP 寄信邏輯
+      /*
+      const { error } = await supabase.auth.signInWithOtp({ email });
+      if (error) throw error;
+      */
+      
+      setEmailStep('otp');
+      setMessage('符文已發送，請查收信件');
+    } catch (err) {
+      setMessage(err.message || '發送失敗');
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (otp.length !== 6) {
+      setMessage('符文需為六位數字');
+      return;
+    }
+    setMessage('驗證天道印記中...');
+    try {
+      // ⚠️ 這裡請替換為你實際使用的 Supabase 或 Firebase OTP 驗證邏輯
+      /*
+      const { data, error } = await supabase.auth.verifyOtp({ email, token: otp, type: 'email' });
+      if (error) throw error;
+      await syncWithServer(data.user.id);
+      */
+      
+      setMessage('驗證成功，讀取命盤中...');
+      // 模擬成功流程 (請在接上後端後移除 setTimeout)
+      setTimeout(() => setPhase('create'), 1500);
+      
+    } catch (err) {
+      setMessage(err.message || '驗證失敗');
+    }
+  };
+
+  // ── C. 伺服器同步與創角 ──
   const syncWithServer = async (authId) => {
     try {
       setMessage('讀取命盤...');
@@ -174,7 +209,6 @@ export default function AuthScreen({ onLogin }) {
         onLogin();
       }
     } catch (err) {
-      console.error(err);
       setMessage(err.message);
     }
   };
@@ -214,19 +248,30 @@ export default function AuthScreen({ onLogin }) {
   return (
     <div className="relative w-full h-full bg-[#0a0a0a] overflow-hidden text-white flex flex-col items-center justify-center">
       
-      {/* 🌟 陣法啟動爆發圖層：青藍色，蓋在最上層 */}
+      {/* 🌟 核心修復：被刪除的動畫 Keyframes 補回 */}
+      <style>{`
+        @keyframes mir-draw-line {
+          to { stroke-dashoffset: 0; opacity: 0.6; }
+        }
+        @keyframes mir-star-pop {
+          to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes fade-in-up {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
+      `}</style>
+
+      {/* 陣法啟動爆發圖層 */}
       <div 
         className="absolute inset-0 z-50 bg-[#00E5FF] pointer-events-none ease-in-out"
-        style={{ 
-          opacity: isFlashing ? 1 : 0,
-          transition: isFlashing ? 'opacity 0.1s' : 'opacity 1.2s' // 亮起極快，消散緩慢
-        }}
+        style={{ opacity: isFlashing ? 1 : 0, transition: isFlashing ? 'opacity 0.1s' : 'opacity 1.2s' }}
       />
 
-      {/* 🌟 只有在 'stars' 階段才渲染星圖，之後徹底消失 */}
+      {/* 星圖渲染 */}
       {phase === 'stars' && stars.length > 0 && (
         <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" viewBox="0 0 320 220" preserveAspectRatio="xMidYMid slice">
-          {/* 連線 */}
           {edges.map((e, idx) => {
             const p1 = stars[e[0]];
             const p2 = stars[e[1]];
@@ -237,14 +282,10 @@ export default function AuthScreen({ onLogin }) {
                 key={`line-${idx}`}
                 x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
                 stroke="#00E5FF" strokeWidth="0.8" strokeDasharray={len} strokeDashoffset={len}
-                style={{
-                  animation: `mir-draw-line ${LINE_DUR}s ${delay}s forwards cubic-bezier(0.4,0,0.2,1)`,
-                  opacity: 0.6
-                }}
+                style={{ animation: `mir-draw-line ${LINE_DUR}s ${delay}s forwards cubic-bezier(0.4,0,0.2,1)`, opacity: 0 }}
               />
             );
           })}
-          {/* 星星 */}
           {stars.map((p, idx) => (
             <circle
               key={`star-${idx}`}
@@ -261,9 +302,9 @@ export default function AuthScreen({ onLogin }) {
         </svg>
       )}
 
-      {/* ── 標題區 (login / create 階段顯示) ── */}
+      {/* 標題區 */}
       {(phase === 'login' || phase === 'create') && (
-        <div className="absolute top-[20%] flex flex-col items-center z-10 w-full px-6">
+        <div className="absolute top-[15%] flex flex-col items-center z-10 w-full px-6">
           <h1
             ref={titleRef}
             className="text-5xl font-bold tracking-[0.4em] ml-[0.2em] mb-4 text-transparent bg-clip-text"
@@ -284,35 +325,91 @@ export default function AuthScreen({ onLogin }) {
           >
             <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-[#00E5FF]/50" />
             <p className="text-[#00E5FF]/80 tracking-[0.3em] text-sm font-light" style={{ fontFamily: "'Kaiti', serif" }}>
-              賽博修仙紀元
+              踏入仙途，尋覓長生
             </p>
             <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-[#00E5FF]/50" />
           </div>
         </div>
       )}
 
-      {/* ── 登入按鈕區 ── */}
+      {/* ── 登入按鈕區 (修復版：Google + Email 雙陣法) ── */}
       {phase === 'login' && (
         <div
           ref={loginFormRef}
-          className="absolute bottom-[25%] flex flex-col items-center gap-6 w-full max-w-sm px-8 z-10 opacity-0 transform translate-y-8 transition-all duration-1000 delay-500"
+          className="absolute bottom-[10%] flex flex-col items-center gap-5 w-full max-w-sm px-8 z-10 opacity-0 transform translate-y-8 transition-all duration-1000 delay-500"
         >
-          {!googleClientId ? (
-            <div className="text-center p-4 border border-red-500/30 bg-red-500/10 rounded backdrop-blur">
-              <p className="text-red-400 text-sm mb-2" style={{ fontFamily: "'Kaiti', serif" }}>缺乏天道印記</p>
-              <p className="text-red-400/70 text-xs">請設定 VITE_GOOGLE_CLIENT_ID</p>
-            </div>
-          ) : (
-            <div className="relative group cursor-pointer" onClick={() => window.google?.accounts.id.prompt()}>
-              <div className="absolute inset-0 bg-[#00E5FF]/20 blur-md rounded-full group-hover:bg-[#00E5FF]/40 transition-all duration-500" />
-              <button className="relative px-12 py-3 border border-[#00E5FF]/50 text-[#00E5FF] tracking-[0.3em] bg-[#0a0a0a]/80 backdrop-blur rounded-full hover:bg-[#00E5FF]/10 transition-all duration-300 overflow-hidden" style={{ fontFamily: "'Kaiti', serif" }}>
-                <span className="relative z-10">神識登入</span>
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#00E5FF]/20 to-transparent -translate-x-full group-hover:animate-[shimmer_2s_infinite]" />
+          {/* 1. Google 登入區 */}
+          <div className="w-full">
+            {!googleClientId ? (
+              <div className="text-center p-3 border border-red-500/30 bg-red-500/10 rounded backdrop-blur">
+                <p className="text-red-400/80 text-xs tracking-widest">Google 登入未設定 (需要 VITE_GOOGLE_CLIENT_ID)</p>
+              </div>
+            ) : (
+              <div className="relative group cursor-pointer" onClick={() => window.google?.accounts.id.prompt()}>
+                <div className="absolute inset-0 bg-[#00E5FF]/20 blur-md rounded group-hover:bg-[#00E5FF]/40 transition-all duration-500" />
+                <button className="w-full relative px-12 py-3 border border-[#00E5FF]/50 text-[#00E5FF] tracking-[0.3em] bg-[#0a0a0a]/80 backdrop-blur rounded hover:bg-[#00E5FF]/10 transition-all duration-300" style={{ fontFamily: "'Kaiti', serif" }}>
+                  <span className="relative z-10">神識登入 (Google)</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 2. 分隔線 */}
+          <div className="flex items-center w-full gap-3 opacity-50 py-2">
+            <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-[#00E5FF]/50" />
+            <span className="text-[#00E5FF] text-xs tracking-[0.2em]" style={{ fontFamily: "'Kaiti', serif" }}>飛劍傳書</span>
+            <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-[#00E5FF]/50" />
+          </div>
+
+          {/* 3. Email 登入區 */}
+          {emailStep === 'input' && (
+            <div className="w-full space-y-4">
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="道友信箱 (Email)"
+                className="w-full bg-transparent border border-white/20 text-white px-4 py-3 rounded outline-none focus:border-[#00E5FF] focus:bg-[#00E5FF]/5 transition-all placeholder:text-white/30 tracking-widest text-center text-sm"
+              />
+              <button
+                onClick={handleSendOTP}
+                className="w-full py-3 bg-white/5 border border-white/20 text-white/80 rounded hover:bg-white/10 hover:border-[#00E5FF]/50 transition-all tracking-[0.2em] text-sm"
+                style={{ fontFamily: "'Kaiti', serif" }}
+              >
+                發送六位驗證符文
               </button>
             </div>
           )}
+
+          {emailStep === 'otp' && (
+            <div className="w-full space-y-4 animate-fade-in-up">
+              <input
+                type="text"
+                maxLength={6}
+                value={otp}
+                onChange={e => setOtp(e.target.value)}
+                placeholder="請輸入六位符文"
+                className="w-full bg-transparent border border-[#00E5FF]/50 text-white px-4 py-3 rounded outline-none focus:border-[#00E5FF] focus:bg-[#00E5FF]/5 transition-all placeholder:text-white/30 tracking-[0.5em] text-center text-lg"
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setEmailStep('input')}
+                  className="flex-1 py-3 border border-white/20 text-gray-400 rounded hover:bg-white/10 transition-all tracking-widest text-sm"
+                >
+                  返回
+                </button>
+                <button
+                  onClick={handleVerifyOTP}
+                  className="flex-[2] py-3 bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] rounded hover:bg-[#00E5FF]/20 transition-all tracking-[0.2em] text-sm font-bold shadow-[0_0_10px_rgba(0,229,255,0.1)]"
+                >
+                  驗證命魂
+                </button>
+              </div>
+            </div>
+          )}
+
           {message && (
-            <p className="text-[#00E5FF] text-sm animate-pulse tracking-widest" style={{ fontFamily: "'Kaiti', serif" }}>
+            <p className="text-[#00E5FF] text-xs animate-pulse tracking-widest mt-1" style={{ fontFamily: "'Kaiti', serif" }}>
               {message}
             </p>
           )}
