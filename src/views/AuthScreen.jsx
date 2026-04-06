@@ -1,608 +1,374 @@
 /**
- * AuthScreen.jsx — 《鏡界》星斗連線動畫 + 無密碼登入 + 創角
- *
- * Phase 狀態機：
- *   'waiting'  → 等 document.fonts.ready
- *   'stars'    → 隨機星斗逐點亮起、逐線連接（~4s）
- *   'login'    → 星圖上浮淡出，標題 + 登入 UI 從下淡入
- *   'create'   → 創角 UI
+ * AuthScreen.jsx — 《鏡界》動態星斗演算 + 法器啟動爆發 + 無密碼登入 + 創角
  */
 import { useState, useEffect, useRef } from 'react';
 import useGameStore from '../store/gameStore';
-
-// ── 星座資料（viewBox 0 0 320 220）───────────────────────────────
-const STARS = [
-  { x: 30,  y: 165 },
-  { x: 88,  y: 134 },
-  { x: 146, y: 128 },
-  { x: 175, y: 152 },
-  { x: 218, y: 120 },
-  { x: 256, y: 82  },
-  { x: 296, y: 54  },
-];
-const EDGES = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]];
 
 // ── 時序常數 ──────────────────────────────────────────────────────
 const BEAT     = 0.48;
 const STAR_DUR = 0.50;
 const LINE_DUR = 0.42;
-const LINE_LAG = 0.28;
-const STARS_TO_LOGIN_MS = Math.round(
-  ((STARS.length - 1) * BEAT + STAR_DUR + 0.8) * 1000
-); // ≈ 4200ms
+const LINE_LAG = 0.20;
 
-// ── 背景散星（固定偽隨機）────────────────────────────────────────
-const BG_STARS = Array.from({ length: 48 }, (_, i) => ({
-  cx:  ((i * 47 + 13) % 100).toFixed(1),
-  cy:  ((i * 31 + 7)  % 100).toFixed(1),
-  r:   i % 5 === 0 ? 1.3 : 0.65,
-  op:  (0.10 + (i % 6) * 0.06).toFixed(2),
-  dur: (2.4 + (i % 5) * 0.7).toFixed(1),
-  del: ((i % 7) * 0.45).toFixed(2),
-}));
+export default function AuthScreen({ onLogin }) {
+  const { player } = useGameStore();
 
-const GENDERS = [
-  { value: '男',   label: '乾（男）' },
-  { value: '女',   label: '坤（女）' },
-  { value: '保密', label: '混元（保密）' },
-];
+  // Phase 狀態機: 'waiting' -> 'stars' -> 'login' -> 'create'
+  const [phase, setPhase] = useState('waiting');
+  
+  // 🌟 控制全螢幕「法器啟動」閃耀的狀態
+  const [isFlashing, setIsFlashing] = useState(false);
 
-// ── CSS ───────────────────────────────────────────────────────────
-const ANIM_CSS = `
-  @keyframes twinkle {
-    0%, 100% { opacity: var(--op); }
-    50%       { opacity: calc(var(--op) * 0.25); }
-  }
-  @keyframes star-pop {
-    0%   { opacity: 0; transform: scale(0.05); }
-    60%  { opacity: 1; transform: scale(1.45); }
-    100% { opacity: 1; transform: scale(1);    }
-  }
-  @keyframes line-draw {
-    from { stroke-dashoffset: 300; }
-    to   { stroke-dashoffset: 0;   }
-  }
-  @keyframes ui-in {
-    from { opacity: 0; transform: translateY(22px); }
-    to   { opacity: 1; transform: translateY(0);    }
-  }
-  .mir-input {
-    width: 100%;
-    padding: clamp(8px,3vw,12px) clamp(10px,4vw,16px);
-    border-radius: .75rem;
-    border: 1px solid rgba(100,120,140,.35);
-    background: rgba(10,15,22,.70);
-    color: #e2e8f0;
-    font-family: 'Kaiti', serif;
-    font-size: clamp(13px,4vw,16px);
-    outline: none;
-    transition: border-color .2s;
-    backdrop-filter: blur(4px);
-  }
-  .mir-input:focus { border-color: rgba(0,229,255,.5); }
-  .mir-input::placeholder { color: rgba(120,130,145,.8); }
-  .mir-btn {
-    width: 100%;
-    padding: clamp(8px,3vw,12px) 0;
-    border-radius: .75rem;
-    font-family: 'Kaiti', serif;
-    font-size: clamp(13px,4vw,16px);
-    letter-spacing: .05em;
-    cursor: pointer;
-    transition: background .2s, border-color .2s, opacity .2s;
-  }
-  .mir-btn:disabled { opacity: .45; cursor: default; }
-  .mir-btn-primary {
-    background: rgba(0,60,80,.55);
-    border: 1px solid rgba(0,229,255,.4);
-    color: rgba(200,245,255,.92);
-    box-shadow: 0 0 18px rgba(0,229,255,.08);
-  }
-  .mir-btn-primary:not(:disabled):hover {
-    background: rgba(0,80,105,.7);
-    border-color: rgba(0,229,255,.65);
-  }
-  .mir-btn-secondary {
-    background: rgba(25,30,38,.75);
-    border: 1px solid rgba(90,100,115,.4);
-    color: #cbd5e1;
-  }
-  .mir-btn-secondary:not(:disabled):hover { background: rgba(40,48,60,.85); }
-`;
+  // 🌟 動態星斗資料
+  const [stars, setStars] = useState([]);
+  const [edges, setEdges] = useState([]);
 
-// ─────────────────────────────────────────────────────────────────
-export default function AuthScreen() {
-  const [phase,        setPhase]        = useState('waiting');
-  const [otpStep,      setOtpStep]      = useState('email');
-  const [email,        setEmail]        = useState('');
-  const [code,         setCode]         = useState('');
-  const [name,         setName]         = useState('');
-  const [gender,       setGender]       = useState('保密');
-  const [isLoading,    setIsLoading]    = useState(false);
-  const [message,      setMessage]      = useState('');
-  const [installEvent, setInstallEvent] = useState(null);
-  const [showIosHint,  setShowIosHint]  = useState(false);
-  const [googleReady,  setGoogleReady]  = useState(false);
+  // 登入/創角相關狀態
+  const [name, setName] = useState('');
+  const [gender, setGender] = useState('保密');
+  const [message, setMessage] = useState('');
+  
+  // DOM Refs
+  const titleRef = useRef(null);
+  const subtitleRef = useRef(null);
+  const loginFormRef = useRef(null);
 
-  const googleBtnRef = useRef(null);
+  // Google OAuth Client ID 檢查
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-  const gameStage             = useGameStore(s => s.gameStage);
-  const markIntroFinished     = useGameStore(s => s.markIntroFinished);
-  const loginWithGoogleOneTap = useGameStore(s => s.loginWithGoogleOneTap);
-  const sendOtp               = useGameStore(s => s.sendOtp);
-  const verifyOtp             = useGameStore(s => s.verifyOtp);
-  const createCharacter       = useGameStore(s => s.createCharacter);
-
-  // ── 字體載入完成後啟動星座動畫 ──────────────────────────────────
+  // =========================================================================
+  // 1. 動態演算星斗與時序控制
+  // =========================================================================
   useEffect(() => {
-    document.fonts.ready.then(() => setPhase('stars'));
-  }, []);
+    // 演算隨機星斗座標 (7~9顆星)
+    const numStars = 7 + Math.floor(Math.random() * 3);
+    const newStars = [];
+    const newEdges = [];
 
-  // ── 星座動畫結束後切換至 login，並通知 App 動畫完成 ─────────────
-  useEffect(() => {
-    if (phase !== 'stars') return;
-    const t = setTimeout(() => {
-      setPhase('login');
-      markIntroFinished();
-    }, STARS_TO_LOGIN_MS);
-    return () => clearTimeout(t);
-  }, [phase]);
-
-  // ── gameStage 變為 naming 時切入創角介面（任何 phase 都接受）───
-  useEffect(() => {
-    if (gameStage === 'naming') {
-      setPhase('create');
-      markIntroFinished();
+    // 計算 X 軸分段，確保星星從左蔓延到右
+    const stepX = 260 / (numStars - 1); 
+    for (let i = 0; i < numStars; i++) {
+      const x = 30 + (i * stepX) + (Math.random() * 20 - 10);
+      const y = 40 + (Math.random() * 140);
+      newStars.push({ x, y });
     }
-  }, [gameStage]);
 
-  // ── PWA 安裝：Android 捕捉 beforeinstallprompt；iOS 偵測 ────────
-  useEffect(() => {
-    const handler = (e) => { e.preventDefault(); setInstallEvent(e); };
-    window.addEventListener('beforeinstallprompt', handler);
-    const isIos        = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-      || window.navigator.standalone;
-    if (isIos && !isStandalone) setShowIosHint(true);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
+    // 計算星軌連線 (基本主線)
+    for (let i = 0; i < numStars - 1; i++) {
+      newEdges.push([i, i + 1]);
+    }
 
-  // ── Google One Tap：動態載入 GSI 腳本並初始化 ───────────────────
-  useEffect(() => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId) return; // 未設環境變數時靜默略過
-
-    const script = document.createElement('script');
-    script.src   = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      window.google.accounts.id.initialize({
-        client_id:           clientId,
-        auto_select:         true,      // 回訪者自動登入
-        cancel_on_tap_outside: false,
-        callback: async ({ credential }) => {
-          setIsLoading(true);
-          setMessage('');
-          const r = await loginWithGoogleOneTap(credential);
-          if (!r.success) {
-            setIsLoading(false);
-            setMessage(r.error ?? '連線失敗，請稍後再試');
-          }
-          // 成功 → onAuthStateChange 自動推進 gameStage
-        },
-      });
-
-      // 渲染官方 Google 按鈕（暗色主題）
-      if (googleBtnRef.current) {
-        window.google.accounts.id.renderButton(googleBtnRef.current, {
-          theme:          'filled_black',
-          size:           'large',
-          shape:          'pill',
-          width:          280,
-          logo_alignment: 'center',
-          text:           'signin_with',
-          locale:         'zh-TW',
-        });
+    // 計算分支星軌 (隨機產生 1~2 條跨星連線，更像真實星座)
+    const extraEdges = Math.floor(Math.random() * 2) + 1;
+    for (let i = 0; i < extraEdges; i++) {
+      const from = Math.floor(Math.random() * (numStars - 2));
+      const to = from + 2; 
+      if (!newEdges.some(e => e[0] === from && e[1] === to)) {
+        newEdges.push([from, to]);
       }
+    }
 
-      // 觸發浮動 One Tap 提示框（覆蓋於畫面右上角）
-      window.google.accounts.id.prompt();
-      setGoogleReady(true);
-    };
-    document.head.appendChild(script);
-    return () => {
-      document.head.removeChild(script);
-      window.google?.accounts?.id?.cancel();
-    };
+    setStars(newStars);
+    setEdges(newEdges);
+
+    // 確認字體載入後開始動畫
+    document.fonts.ready.then(() => {
+      setPhase('stars');
+
+      // 根據星星與連線數量計算總時長
+      const totalDur = newStars.length * STAR_DUR + newEdges.length * LINE_DUR + LINE_LAG;
+
+      // 🌟 時序 1：陣法啟動，全螢幕爆發青藍靈光
+      const flashTimer = setTimeout(() => {
+        setIsFlashing(true);
+      }, totalDur * 1000 + 200);
+
+      // 🌟 時序 2：光芒最盛時，偷偷把背景切換成登入介面
+      const loginTimer = setTimeout(() => {
+        setPhase('login');
+      }, totalDur * 1000 + 700);
+
+      // 🌟 時序 3：靈光褪去，登入大門浮現
+      const fadeTimer = setTimeout(() => {
+        setIsFlashing(false);
+      }, totalDur * 1000 + 1200);
+
+      return () => {
+        clearTimeout(flashTimer);
+        clearTimeout(loginTimer);
+        clearTimeout(fadeTimer);
+      };
+    });
   }, []);
 
-  // ── Handlers ────────────────────────────────────────────────────
-  const handleSendOtp = async () => {
-    if (!email.trim()) { setMessage('請輸入 Email'); return; }
-    setIsLoading(true); setMessage('');
-    const r = await sendOtp(email.trim());
-    setIsLoading(false);
-    if (r.success) { setOtpStep('code'); setMessage('驗證符文已傳至信箱（請也檢查垃圾郵件）'); }
-    else setMessage(r.error ?? '發送失敗，請稍後再試');
+  // =========================================================================
+  // 2. 動畫進場控制 (Phase 切換時觸發)
+  // =========================================================================
+  useEffect(() => {
+    if (phase === 'login' && titleRef.current && subtitleRef.current && loginFormRef.current) {
+      // 標題與登入區塊淡入
+      titleRef.current.style.opacity = '1';
+      titleRef.current.style.transform = 'translateY(0) scale(1)';
+      subtitleRef.current.style.opacity = '1';
+      subtitleRef.current.style.transform = 'translateY(0)';
+      
+      setTimeout(() => {
+        if (loginFormRef.current) {
+          loginFormRef.current.style.opacity = '1';
+          loginFormRef.current.style.transform = 'translateY(0)';
+        }
+      }, 400);
+
+      // 初始化 Google One Tap (如果 Phase 是 login 且有 Client ID)
+      if (googleClientId && window.google) {
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: handleGoogleCredentialResponse,
+          auto_select: false,
+          cancel_on_tap_outside: false
+        });
+        window.google.accounts.id.prompt(); 
+      }
+    }
+  }, [phase, googleClientId]);
+
+  // =========================================================================
+  // 3. 登入邏輯處理
+  // =========================================================================
+  const handleGoogleCredentialResponse = async (response) => {
+    try {
+      setMessage('天道認證中...');
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || '認證失敗');
+      
+      const sessionStr = JSON.stringify({ user: data.user, token: data.token });
+      localStorage.setItem('mirrorrealm_session', sessionStr);
+      await syncWithServer(data.user.id);
+    } catch (err) {
+      console.error('Google登入錯誤:', err);
+      setMessage(err.message);
+    }
   };
 
-  const handleVerifyOtp = async () => {
-    if (code.trim().length < 6) { setMessage('請輸入 6 位驗證符文'); return; }
-    setIsLoading(true); setMessage('');
-    const r = await verifyOtp(email.trim(), code.trim());
-    setIsLoading(false);
-    if (!r.success) setMessage(r.error ?? '符文有誤，請重新確認');
+  const syncWithServer = async (authId) => {
+    try {
+      setMessage('讀取命盤...');
+      const res = await fetch('/api/auth/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auth_id: authId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+
+      if (data.isNew) {
+        setPhase('create');
+        setMessage('');
+      } else {
+        useGameStore.getState().setPlayer(data.player);
+        onLogin();
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage(err.message);
+    }
   };
 
-  const handleCreateCharacter = async () => {
-    const trimmed = name.trim();
-    if (trimmed.length < 2 || trimmed.length > 6) { setMessage('道號需為 2 至 6 個字'); return; }
-    setIsLoading(true); setMessage('');
-    const r = await createCharacter(trimmed, gender);
-    setIsLoading(false);
-    if (!r.success) setMessage(r.error ?? '創角失敗，請稍後再試');
+  const handleCreate = async () => {
+    if (!name.trim()) return setMessage('需定下道號。');
+    if (name.length > 8) return setMessage('道號至多八字。');
+    
+    try {
+      setMessage('凝聚命魂中...');
+      const sessionStr = localStorage.getItem('mirrorrealm_session');
+      if (!sessionStr) throw new Error('未授權，請重整頁面。');
+      const session = JSON.parse(sessionStr);
+
+      const res = await fetch('/api/auth/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          auth_id: session.user.id, 
+          name: name.trim(), 
+          gender 
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      
+      useGameStore.getState().setPlayer(data.player);
+      onLogin();
+    } catch (err) {
+      setMessage(err.message);
+    }
   };
 
-  const isLoginPhase      = phase === 'login' || phase === 'create';
-  const showConstellation = phase !== 'create';
-
-  // ─────────────────────────────────────────────────────────────
+  // =========================================================================
+  // 4. 渲染 UI
+  // =========================================================================
   return (
-    <div
-      className="absolute inset-0 overflow-hidden flex flex-col items-center justify-center gap-6"
-      style={{
-        background: [
-          'radial-gradient(ellipse 90% 70% at 50% 35%, #040d1a 0%, transparent 70%)',
-          'linear-gradient(180deg, #030810 0%, #010306 100%)',
-        ].join(', '),
-      }}
-    >
-      <style>{ANIM_CSS}</style>
+    <div className="relative w-full h-full bg-[#0a0a0a] overflow-hidden text-white flex flex-col items-center justify-center">
+      
+      {/* 🌟 陣法啟動爆發圖層：青藍色，蓋在最上層 */}
+      <div 
+        className="absolute inset-0 z-50 bg-[#00E5FF] pointer-events-none ease-in-out"
+        style={{ 
+          opacity: isFlashing ? 1 : 0,
+          transition: isFlashing ? 'opacity 0.1s' : 'opacity 1.2s' // 亮起極快，消散緩慢
+        }}
+      />
 
-      {/* ── 背景散星 ── */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-        {BG_STARS.map((s, i) => (
-          <circle
-            key={i}
-            cx={`${s.cx}%`} cy={`${s.cy}%`} r={s.r}
-            fill="white"
+      {/* 🌟 只有在 'stars' 階段才渲染星圖，之後徹底消失 */}
+      {phase === 'stars' && stars.length > 0 && (
+        <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" viewBox="0 0 320 220" preserveAspectRatio="xMidYMid slice">
+          {/* 連線 */}
+          {edges.map((e, idx) => {
+            const p1 = stars[e[0]];
+            const p2 = stars[e[1]];
+            const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            const delay = (STAR_DUR * (e[0] + 1)) + (idx * LINE_DUR) + LINE_LAG;
+            return (
+              <line
+                key={`line-${idx}`}
+                x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                stroke="#00E5FF" strokeWidth="0.8" strokeDasharray={len} strokeDashoffset={len}
+                style={{
+                  animation: `mir-draw-line ${LINE_DUR}s ${delay}s forwards cubic-bezier(0.4,0,0.2,1)`,
+                  opacity: 0.6
+                }}
+              />
+            );
+          })}
+          {/* 星星 */}
+          {stars.map((p, idx) => (
+            <circle
+              key={`star-${idx}`}
+              cx={p.x} cy={p.y} r="2.5"
+              fill="#fff" filter="drop-shadow(0 0 6px #00E5FF)"
+              style={{
+                opacity: 0,
+                transform: 'scale(0.5)',
+                transformOrigin: `${p.x}px ${p.y}px`,
+                animation: `mir-star-pop ${STAR_DUR}s ${idx * STAR_DUR}s forwards cubic-bezier(0.34,1.56,0.64,1)`
+              }}
+            />
+          ))}
+        </svg>
+      )}
+
+      {/* ── 標題區 (login / create 階段顯示) ── */}
+      {(phase === 'login' || phase === 'create') && (
+        <div className="absolute top-[20%] flex flex-col items-center z-10 w-full px-6">
+          <h1
+            ref={titleRef}
+            className="text-5xl font-bold tracking-[0.4em] ml-[0.2em] mb-4 text-transparent bg-clip-text"
             style={{
-              '--op': s.op,
-              opacity: s.op,
-              animation: `twinkle ${s.dur}s ease-in-out ${s.del}s infinite`,
+              fontFamily: "'Kaiti', serif",
+              backgroundImage: 'linear-gradient(180deg, #ffffff 0%, #a5f3fc 100%)',
+              filter: 'drop-shadow(0 4px 15px rgba(0, 229, 255, 0.3))',
+              opacity: 0,
+              transform: 'translateY(-20px) scale(0.95)',
+              transition: 'all 1.2s cubic-bezier(0.2, 0.8, 0.2, 1)'
             }}
-          />
-        ))}
-      </svg>
-
-      {/* ── 星座 SVG ── */}
-      {showConstellation && (
-        <div
-          style={{
-            flexShrink: 0,
-            transition: 'transform 1.1s cubic-bezier(0.4,0,0.2,1), opacity 1.1s ease',
-            transform:  isLoginPhase ? 'translateY(-6vh)' : 'translateY(0)',
-            opacity:    isLoginPhase ? 0.22 : 1,
-          }}
-        >
-          <svg
-            viewBox="0 0 320 220"
-            style={{ width: 'min(88vw, 340px)', display: 'block', overflow: 'visible' }}
-            aria-hidden="true"
           >
-            <defs>
-              <filter id="sg" x="-80%" y="-80%" width="260%" height="260%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-
-            {/* 連線 */}
-            {EDGES.map(([a, b], i) => {
-              const delay = (i * BEAT + LINE_LAG).toFixed(2);
-              return (
-                <line
-                  key={`l${i}`}
-                  x1={STARS[a].x} y1={STARS[a].y}
-                  x2={STARS[b].x} y2={STARS[b].y}
-                  stroke="rgba(0,229,255,0.50)"
-                  strokeWidth="1"
-                  strokeLinecap="round"
-                  strokeDasharray={300}
-                  style={{
-                    strokeDashoffset: phase === 'waiting' ? 300 : undefined,
-                    animation: phase !== 'waiting'
-                      ? `line-draw ${LINE_DUR}s ease-out ${delay}s both`
-                      : 'none',
-                  }}
-                />
-              );
-            })}
-
-            {/* 星點 */}
-            {STARS.map((s, i) => {
-              const delay = (i * BEAT).toFixed(2);
-              return (
-                <g
-                  key={`s${i}`}
-                  filter="url(#sg)"
-                  style={{
-                    transformOrigin: `${s.x}px ${s.y}px`,
-                    animation: phase !== 'waiting'
-                      ? `star-pop ${STAR_DUR}s cubic-bezier(.34,1.56,.64,1) ${delay}s both`
-                      : 'none',
-                    opacity: phase === 'waiting' ? 0 : undefined,
-                  }}
-                >
-                  <circle cx={s.x} cy={s.y} r={7}   fill="rgba(0,229,255,0.12)" />
-                  <circle cx={s.x} cy={s.y} r={3.8}  fill="#00E5FF" />
-                  <circle cx={s.x} cy={s.y} r={1.4}  fill="rgba(255,255,255,0.95)" />
-                </g>
-              );
-            })}
-          </svg>
+            鏡界
+          </h1>
+          <div
+            ref={subtitleRef}
+            className="flex items-center gap-3 opacity-0 transform translate-y-4 transition-all duration-1000 delay-300"
+          >
+            <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-[#00E5FF]/50" />
+            <p className="text-[#00E5FF]/80 tracking-[0.3em] text-sm font-light" style={{ fontFamily: "'Kaiti', serif" }}>
+              賽博修仙紀元
+            </p>
+            <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-[#00E5FF]/50" />
+          </div>
         </div>
       )}
 
-      {/* ── 登入 UI ── */}
+      {/* ── 登入按鈕區 ── */}
       {phase === 'login' && (
         <div
-          style={{
-            animation: 'ui-in 0.9s ease 0.1s both',
-            width: '100%', maxWidth: 420,
-            padding: '0 9vw',
-            display: 'flex', flexDirection: 'column', gap: '3.5vw',
-            flexShrink: 0,
-          }}
+          ref={loginFormRef}
+          className="absolute bottom-[25%] flex flex-col items-center gap-6 w-full max-w-sm px-8 z-10 opacity-0 transform translate-y-8 transition-all duration-1000 delay-500"
         >
-          <div style={{ textAlign: 'center', marginBottom: '1vw' }}>
-            <h1 style={{
-              fontFamily: "'Ma Shan Zheng', serif",
-              fontSize: 'clamp(40px,12.5vw,54px)',
-              color: 'rgba(210,248,255,0.92)',
-              letterSpacing: '0.5em',
-              textShadow: '0 0 28px rgba(0,229,255,0.55), 0 0 60px rgba(0,229,255,0.18)',
-              margin: 0,
-            }}>
-              鏡界
-            </h1>
-            <p style={{
-              fontFamily: "'Kaiti', serif",
-              color: 'rgba(103,232,249,0.58)',
-              fontSize: 'clamp(12px,3.8vw,15px)',
-              letterSpacing: '0.45em',
-              marginTop: '1.5vw',
-            }}>
-              踏入仙途，尋覓長生
-            </p>
-          </div>
-
-          {/* Google One Tap 官方按鈕（GSI renderButton） */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-            <div
-              ref={googleBtnRef}
-              style={{ minHeight: 44, display: 'flex', justifyContent: 'center' }}
-            />
-            {!googleReady && (
-              <p style={{
-                fontFamily: "'Kaiti', serif",
-                color: 'rgba(100,140,160,0.65)',
-                fontSize: 'clamp(11px,3vw,13px)',
-                letterSpacing: '0.2em',
-                margin: 0,
-              }}>
-                {import.meta.env.VITE_GOOGLE_CLIENT_ID
-                  ? '天道連線中…'
-                  : 'Google 登入未設定（需要 VITE_GOOGLE_CLIENT_ID）'}
-              </p>
-            )}
-            {isLoading && (
-              <p style={{
-                fontFamily: "'Kaiti', serif",
-                color: 'rgba(0,229,255,0.8)',
-                fontSize: 'clamp(12px,3.5vw,14px)',
-                letterSpacing: '0.3em',
-                margin: 0,
-              }}>
-                連接天道中…
-              </p>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '3vw' }}>
-            <div style={{ flex: 1, height: 1, background: 'rgba(0,229,255,0.15)' }} />
-            <span style={{
-              fontFamily: "'Kaiti', serif",
-              color: 'rgba(120,140,160,0.8)',
-              fontSize: 'clamp(11px,3vw,13px)',
-              letterSpacing: '0.3em',
-            }}>
-              飛劍傳書
-            </span>
-            <div style={{ flex: 1, height: 1, background: 'rgba(0,229,255,0.15)' }} />
-          </div>
-
-          {otpStep === 'email' && (
-            <>
-              <input
-                className="mir-input"
-                type="email"
-                placeholder="道友郵箱（Email）"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSendOtp()}
-              />
-              <button className="mir-btn mir-btn-secondary" onClick={handleSendOtp} disabled={isLoading}>
-                {isLoading ? '傳送符文中…' : '▶ 發送六位驗證符文'}
+          {!googleClientId ? (
+            <div className="text-center p-4 border border-red-500/30 bg-red-500/10 rounded backdrop-blur">
+              <p className="text-red-400 text-sm mb-2" style={{ fontFamily: "'Kaiti', serif" }}>缺乏天道印記</p>
+              <p className="text-red-400/70 text-xs">請設定 VITE_GOOGLE_CLIENT_ID</p>
+            </div>
+          ) : (
+            <div className="relative group cursor-pointer" onClick={() => window.google?.accounts.id.prompt()}>
+              <div className="absolute inset-0 bg-[#00E5FF]/20 blur-md rounded-full group-hover:bg-[#00E5FF]/40 transition-all duration-500" />
+              <button className="relative px-12 py-3 border border-[#00E5FF]/50 text-[#00E5FF] tracking-[0.3em] bg-[#0a0a0a]/80 backdrop-blur rounded-full hover:bg-[#00E5FF]/10 transition-all duration-300 overflow-hidden" style={{ fontFamily: "'Kaiti', serif" }}>
+                <span className="relative z-10">神識登入</span>
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#00E5FF]/20 to-transparent -translate-x-full group-hover:animate-[shimmer_2s_infinite]" />
               </button>
-            </>
+            </div>
           )}
-
-          {otpStep === 'code' && (
-            <>
-              <p style={{
-                fontFamily: "'Kaiti', serif", textAlign: 'center',
-                color: 'rgba(148,163,184,0.85)', fontSize: 'clamp(12px,3.4vw,14px)',
-              }}>
-                符文已傳至：<span style={{ color: '#67e8f9' }}>{email}</span>
-              </p>
-              <input
-                className="mir-input"
-                style={{ textAlign: 'center', fontSize: 'clamp(16px,5.5vw,22px)', letterSpacing: '0.55em', color: '#a5f3fc' }}
-                type="text" inputMode="numeric" placeholder="— — — — — —"
-                value={code}
-                onChange={e => setCode(e.target.value.replace(/\D/g,'').slice(0,6))}
-                onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
-              />
-              <button
-                className="mir-btn mir-btn-primary"
-                onClick={handleVerifyOtp}
-                disabled={isLoading || code.length < 6}
-              >
-                {isLoading ? '驗印中…' : '▶ 以符文踏入仙途'}
-              </button>
-              <button
-                style={{
-                  background: 'none', border: 'none',
-                  color: 'rgba(100,116,139,0.8)',
-                  fontFamily: "'Kaiti', serif",
-                  fontSize: 'clamp(11px,3vw,13px)',
-                  cursor: 'pointer', textDecoration: 'underline',
-                }}
-                onClick={() => { setOtpStep('email'); setCode(''); setMessage(''); }}
-              >
-                重新輸入 Email
-              </button>
-            </>
-          )}
-
           {message && (
-            <p style={{
-              fontFamily: "'Kaiti', serif", textAlign: 'center',
-              color: '#fcd34d', fontSize: 'clamp(12px,3.5vw,14px)',
-            }}>
+            <p className="text-[#00E5FF] text-sm animate-pulse tracking-widest" style={{ fontFamily: "'Kaiti', serif" }}>
               {message}
-            </p>
-          )}
-
-          {installEvent && (
-            <button
-              className="mir-btn mir-btn-secondary"
-              style={{ marginTop: '1vw', opacity: 0.75 }}
-              onClick={async () => {
-                installEvent.prompt();
-                await installEvent.userChoice;
-                setInstallEvent(null);
-              }}
-            >
-              ⬇ 安裝至主畫面（離線可用）
-            </button>
-          )}
-          {showIosHint && !installEvent && (
-            <p style={{
-              fontFamily: "'Kaiti', serif", textAlign: 'center',
-              color: 'rgba(148,163,184,0.65)', fontSize: 'clamp(11px,3vw,12px)',
-              lineHeight: 1.7, marginTop: '1vw',
-            }}>
-              在 Safari 點選 <span style={{ color: '#67e8f9' }}>「分享」</span>
-              {' →'} <span style={{ color: '#67e8f9' }}>「加入主畫面」</span>
-              {' '}即可安裝
             </p>
           )}
         </div>
       )}
 
-      {/* ── 創角 UI ── */}
+      {/* ── 創角區 ── */}
       {phase === 'create' && (
-        <div
-          style={{
-            animation: 'ui-in 0.7s ease both',
-            width: '100%', maxWidth: 420,
-            padding: '0 9vw',
-            display: 'flex', flexDirection: 'column', gap: '4vw',
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: '1vw' }}>
-            <h2 style={{
-              fontFamily: "'Kaiti', serif",
-              color: '#cff2fd',
-              fontSize: 'clamp(28px,9.5vw,38px)',
-              letterSpacing: '0.3em',
-              textShadow: '0 0 22px rgba(0,229,255,0.35)',
-              margin: 0,
-            }}>
-              凝聚命格
-            </h2>
-            <p style={{
-              fontFamily: "'Kaiti', serif",
-              color: 'rgba(120,140,160,0.8)',
-              fontSize: 'clamp(12px,3.5vw,14px)',
-              letterSpacing: '0.15em',
-              marginTop: '1.5vw',
-            }}>
-              凡人初入仙途，先定道號與根骨
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2vw' }}>
-            <label style={{ fontFamily: "'Kaiti', serif", color: 'rgba(148,163,184,0.85)', fontSize: 'clamp(12px,3.5vw,14px)' }}>
-              道號（2–6 字）
-            </label>
-            <input
-              className="mir-input"
-              style={{ textAlign: 'center', fontSize: 'clamp(15px,5vw,20px)' }}
-              type="text" placeholder="請輸入道友名諱…"
-              value={name} onChange={e => setName(e.target.value)} maxLength={6}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2vw' }}>
-            <label style={{ fontFamily: "'Kaiti', serif", color: 'rgba(148,163,184,0.85)', fontSize: 'clamp(12px,3.5vw,14px)' }}>
-              根骨（性別）
-            </label>
-            <div style={{ display: 'flex', gap: '2.5vw' }}>
-              {GENDERS.map(g => (
-                <button
-                  key={g.value}
-                  onClick={() => setGender(g.value)}
-                  style={{
-                    flex: 1,
-                    padding: 'clamp(8px,3vw,12px) 0',
-                    borderRadius: '.75rem',
-                    fontFamily: "'Kaiti', serif",
-                    fontSize: 'clamp(11px,3.4vw,14px)',
-                    cursor: 'pointer',
-                    transition: 'all .18s',
-                    background: gender === g.value ? 'rgba(0,60,80,0.6)'              : 'rgba(15,20,30,0.7)',
-                    border:     gender === g.value ? '1px solid rgba(0,229,255,0.55)' : '1px solid rgba(60,75,95,0.45)',
-                    color:      gender === g.value ? '#a5f3fc'                         : 'rgba(100,120,145,0.9)',
-                    boxShadow:  gender === g.value ? '0 0 10px rgba(0,229,255,0.15)'  : 'none',
-                  }}
-                >
-                  {g.label}
-                </button>
-              ))}
+        <div className="absolute bottom-[20%] flex flex-col items-center gap-6 w-full max-w-sm px-8 z-10 animate-fade-in-up">
+          <div className="w-full space-y-5 bg-[#0f141e]/80 p-6 rounded-xl border border-[#00E5FF]/20 backdrop-blur shadow-[0_0_30px_rgba(0,229,255,0.05)]">
+            <h3 className="text-center text-[#00E5FF] tracking-[0.2em] mb-2" style={{ fontFamily: "'Kaiti', serif" }}>凝聚命魂</h3>
+            
+            <div className="space-y-2">
+              <label className="text-xs text-[#00E5FF]/60 tracking-widest ml-1">道號</label>
+              <input
+                type="text"
+                maxLength={8}
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="請輸入道號"
+                className="w-full bg-[#0a0a0a]/80 border border-[#00E5FF]/30 text-white px-4 py-3 rounded outline-none focus:border-[#00E5FF] focus:shadow-[0_0_10px_rgba(0,229,255,0.2)] transition-all placeholder:text-white/20 tracking-widest text-center"
+                style={{ fontFamily: "'Kaiti', serif" }}
+              />
             </div>
-          </div>
 
-          {message && (
-            <p style={{ fontFamily: "'Kaiti', serif", textAlign: 'center', color: '#f87171', fontSize: 'clamp(12px,3.5vw,14px)' }}>
-              {message}
-            </p>
-          )}
+            <div className="space-y-2">
+              <label className="text-xs text-[#00E5FF]/60 tracking-widest ml-1">性別</label>
+              <div className="flex gap-3">
+                {[{ label: '男修', value: '男' }, { label: '女修', value: '女' }, { label: '天道保密', value: '保密' }].map(g => (
+                  <button
+                    key={g.value}
+                    onClick={() => setGender(g.value)}
+                    className="flex-1 py-2 rounded text-sm tracking-widest transition-all"
+                    style={{
+                      fontFamily: "'Kaiti', serif",
+                      background: gender === g.value ? 'rgba(0,229,255,0.15)' : 'rgba(10,10,10,0.8)',
+                      border: gender === g.value ? '1px solid rgba(0,229,255,0.6)' : '1px solid rgba(0,229,255,0.2)',
+                      color: gender === g.value ? '#00E5FF' : 'rgba(255,255,255,0.5)',
+                      boxShadow: gender === g.value ? '0 0 10px rgba(0,229,255,0.2)' : 'none'
+                    }}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {message && <p className="text-red-400 text-xs text-center tracking-widest">{message}</p>}
+          </div>
 
           <button
-            className="mir-btn mir-btn-primary"
-            style={{ fontSize: 'clamp(15px,5vw,20px)', letterSpacing: '0.2em', marginTop: '1vw' }}
-            onClick={handleCreateCharacter}
-            disabled={name.trim().length < 2 || isLoading}
+            onClick={handleCreate}
+            className="w-full py-3 bg-[#00E5FF]/20 border border-[#00E5FF]/60 text-[#00E5FF] rounded hover:bg-[#00E5FF]/30 active:scale-95 transition-all tracking-[0.3em] font-bold shadow-[0_0_15px_rgba(0,229,255,0.2)]"
+            style={{ fontFamily: "'Kaiti', serif" }}
           >
-            {isLoading ? '凝聚命格中…' : '踏入仙途'}
+            踏入鏡界
           </button>
         </div>
       )}
