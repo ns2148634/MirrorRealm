@@ -5,6 +5,7 @@ import useGameStore from './store/gameStore';
 
 import AuthScreen   from './views/AuthScreen';
 import PlayingStage from './components/PlayingStage';
+import CombatModal  from './components/CombatModal';
 // ──────────────────────────────────────────────────────────────────────────────
 // 🌟 核心改動：在 App.jsx 中加入開場動畫防護鎖，確保星斗連線動畫一定會播完
 export default function App() {
@@ -68,6 +69,9 @@ export default function App() {
               <PlayingStage key="playing" />
             )}
           </AnimatePresence>
+
+          {/* 全域戰鬥 Modal：任何頁面呼叫 triggerCombat 即可觸發 */}
+          <CombatModal />
         </div>
       </div>
     </>

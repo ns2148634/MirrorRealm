@@ -229,6 +229,15 @@ const useGameStore = create((set, get) => ({
     player: state.player ? { ...state.player, ...patch } : state.player,
   })),
 
+  // ── 全域戰鬥狀態 ─────────────────────────────────────────────
+  // combatState 格式：
+  //   { source: 'explore'|'training', nodeName, enemyOverride?, onComplete? }
+  // 設計原則：任何場景（探索、修煉法器練功）都呼叫 triggerCombat，
+  // CombatModal 從 store 讀取後統一處理姿態選擇、API 呼叫、戰報顯示。
+  combatState: null,
+  triggerCombat: (target) => set({ combatState: target }),
+  clearCombat:   ()       => set({ combatState: null }),
+
   generateInitialTasks: () => {},
 }));
 

@@ -47,7 +47,8 @@ const initialLoadout = {
 };
 
 export default function CultivateView() {
-  const player = useGameStore((state) => state.player);
+  const player        = useGameStore((state) => state.player);
+  const triggerCombat = useGameStore((state) => state.triggerCombat);
   const isMale = player?.gender !== 'female';
   const auraColor = isMale ? '#00E5FF' : '#9B5CFF';
   const meditatorImg = player?.gender === 'female' ? 'meditator_female.svg' : 'meditator_male.svg';
@@ -452,6 +453,36 @@ export default function CultivateView() {
                     <p className="text-[clamp(12px,3.5cqw,14px)] text-gray-400 leading-relaxed tracking-wider bg-black/30 p-2 rounded-lg border border-white/5">
                       {item.desc}
                     </p>
+
+                    {/* 法器專屬：演武練功入口 */}
+                    {isArtifact && !isBrowsing && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          triggerCombat({
+                            source:   'training',
+                            nodeName: `演武幻影・${item.name}`,
+                            // 演武幻影：以法器數值生成對應強度的假想敵
+                            enemyOverride: {
+                              name:        `演武幻影・${item.name}`,
+                              hp:          Math.max(30, (item.cost ?? 5) * 8),
+                              attack:      Math.max(8,  (item.cost ?? 5) * 2),
+                              defense:     Math.max(3,  (item.cost ?? 5)),
+                              mind:        0,
+                              realm_level: player?.realm_level ?? 1,
+                              element:     null,
+                              skills:      null, // 使用預設技能池
+                              exp_reward:  Math.max(5, (item.cost ?? 5) * 3),
+                              drop_item_name: null,
+                              drop_rate:   0,
+                            },
+                          });
+                        }}
+                        className="mt-2 w-full py-1.5 rounded-lg border border-[#9B5CFF]/40 bg-[#9B5CFF]/10 text-[#9B5CFF] text-[11px] tracking-[0.4em] hover:bg-[#9B5CFF]/20 active:scale-95 transition-all"
+                      >
+                        演武練功
+                      </button>
+                    )}
                   </div>
                 )
               })
