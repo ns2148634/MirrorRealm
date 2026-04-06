@@ -7,7 +7,7 @@
  *   'login'    → 星圖上浮淡出，標題 + 登入 UI 從下淡入
  *   'create'   → 創角 UI
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import useGameStore from '../store/gameStore';
 
 // ── 星座資料（viewBox 0 0 320 220）───────────────────────────────
