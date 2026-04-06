@@ -122,13 +122,16 @@ export default function AuthScreen() {
   const [message,      setMessage]      = useState('');
   const [installEvent, setInstallEvent] = useState(null);
   const [showIosHint,  setShowIosHint]  = useState(false);
+  const [googleReady,  setGoogleReady]  = useState(false);
 
-  const gameStage          = useGameStore(s => s.gameStage);
-  const markIntroFinished  = useGameStore(s => s.markIntroFinished);
-  const loginWithGoogle    = useGameStore(s => s.loginWithGoogle);
-  const sendOtp            = useGameStore(s => s.sendOtp);
-  const verifyOtp          = useGameStore(s => s.verifyOtp);
-  const createCharacter    = useGameStore(s => s.createCharacter);
+  const googleBtnRef = useRef(null);
+
+  const gameStage             = useGameStore(s => s.gameStage);
+  const markIntroFinished     = useGameStore(s => s.markIntroFinished);
+  const loginWithGoogleOneTap = useGameStore(s => s.loginWithGoogleOneTap);
+  const sendOtp               = useGameStore(s => s.sendOtp);
+  const verifyOtp             = useGameStore(s => s.verifyOtp);
+  const createCharacter       = useGameStore(s => s.createCharacter);
 
   // ── 字體載入完成後啟動星座動畫 ──────────────────────────────────
   useEffect(() => {
@@ -164,6 +167,56 @@ export default function AuthScreen() {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
+  // ── Google One Tap：動態載入 GSI 腳本並初始化 ───────────────────
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) return; // 未設環境變數時靜默略過
+
+    const script = document.createElement('script');
+    script.src   = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      window.google.accounts.id.initialize({
+        client_id:           clientId,
+        auto_select:         true,      // 回訪者自動登入
+        cancel_on_tap_outside: false,
+        callback: async ({ credential }) => {
+          setIsLoading(true);
+          setMessage('');
+          const r = await loginWithGoogleOneTap(credential);
+          if (!r.success) {
+            setIsLoading(false);
+            setMessage(r.error ?? '連線失敗，請稍後再試');
+          }
+          // 成功 → onAuthStateChange 自動推進 gameStage
+        },
+      });
+
+      // 渲染官方 Google 按鈕（暗色主題）
+      if (googleBtnRef.current) {
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          theme:          'filled_black',
+          size:           'large',
+          shape:          'pill',
+          width:          280,
+          logo_alignment: 'center',
+          text:           'signin_with',
+          locale:         'zh-TW',
+        });
+      }
+
+      // 觸發浮動 One Tap 提示框（覆蓋於畫面右上角）
+      window.google.accounts.id.prompt();
+      setGoogleReady(true);
+    };
+    document.head.appendChild(script);
+    return () => {
+      document.head.removeChild(script);
+      window.google?.accounts?.id?.cancel();
+    };
+  }, []);
+
   // ── Handlers ────────────────────────────────────────────────────
   const handleSendOtp = async () => {
     if (!email.trim()) { setMessage('請輸入 Email'); return; }
@@ -180,12 +233,6 @@ export default function AuthScreen() {
     const r = await verifyOtp(email.trim(), code.trim());
     setIsLoading(false);
     if (!r.success) setMessage(r.error ?? '符文有誤，請重新確認');
-  };
-
-  const handleGoogleLogin = async () => {
-    setIsLoading(true); setMessage('');
-    const r = await loginWithGoogle();
-    if (!r.success) { setIsLoading(false); setMessage(r.error ?? '連線失敗'); }
   };
 
   const handleCreateCharacter = async () => {
@@ -334,9 +381,37 @@ export default function AuthScreen() {
             </p>
           </div>
 
-          <button className="mir-btn mir-btn-primary" onClick={handleGoogleLogin} disabled={isLoading}>
-            {isLoading ? '連接天道中…' : '【天道之力】　Google 一鍵踏入仙途'}
-          </button>
+          {/* Google One Tap 官方按鈕（GSI renderButton） */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+            <div
+              ref={googleBtnRef}
+              style={{ minHeight: 44, display: 'flex', justifyContent: 'center' }}
+            />
+            {!googleReady && (
+              <p style={{
+                fontFamily: "'Kaiti', serif",
+                color: 'rgba(100,140,160,0.65)',
+                fontSize: 'clamp(11px,3vw,13px)',
+                letterSpacing: '0.2em',
+                margin: 0,
+              }}>
+                {import.meta.env.VITE_GOOGLE_CLIENT_ID
+                  ? '天道連線中…'
+                  : 'Google 登入未設定（需要 VITE_GOOGLE_CLIENT_ID）'}
+              </p>
+            )}
+            {isLoading && (
+              <p style={{
+                fontFamily: "'Kaiti', serif",
+                color: 'rgba(0,229,255,0.8)',
+                fontSize: 'clamp(12px,3.5vw,14px)',
+                letterSpacing: '0.3em',
+                margin: 0,
+              }}>
+                連接天道中…
+              </p>
+            )}
+          </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '3vw' }}>
             <div style={{ flex: 1, height: 1, background: 'rgba(0,229,255,0.15)' }} />

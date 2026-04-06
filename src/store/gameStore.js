@@ -62,13 +62,14 @@ const useGameStore = create((set, get) => ({
     }
   },
 
-  // ── Google OAuth 登入 ────────────────────────────────────────
-  loginWithGoogle: async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
+  // ── Google One Tap 登入（接收 GSI 回傳的 id_token）──────────
+  loginWithGoogleOneTap: async (idToken) => {
+    const { error } = await supabase.auth.signInWithIdToken({
       provider: 'google',
-      options:  { redirectTo: `${window.location.origin}/auth/callback` },
+      token: idToken,
     });
     if (error) return { success: false, error: error.message };
+    // 成功後 onAuthStateChange 觸發 SIGNED_IN，自動走後續同步流程
     return { success: true };
   },
 
