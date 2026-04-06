@@ -23,5 +23,9 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ]
+  ],
+  "crons": [{
+    "path": "/api/daily/generate",
+    "schedule": "0 0 * * *"
+  }]
 }

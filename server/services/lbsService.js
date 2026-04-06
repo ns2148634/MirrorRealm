@@ -1,6 +1,6 @@
 // server/services/lbsService.js
 import * as db from '../config/db.js';
-import { getGridId } from '../utils/geoUtils.js';
+import { getGridId, getDistance } from '../utils/geoUtils.js';
 import { calculateOfflineDelta } from '../lib/recovery.js';
 import crypto from 'crypto';
 import { runCombat } from './combatService.js';
@@ -18,74 +18,117 @@ import { runCombat } from './combatService.js';
 const SCAN_COOLDOWN_SEC = 60;
 
 export async function performScan(playerId, lat, lng) {
-    // Step 1: 讀取玩家資源 + 冷卻時間戳
-    const playerResult = await db.query(
-        `SELECT ep, max_ep, hp, max_hp, sp, max_sp, aura, last_sync_time, last_scan_time
-         FROM players WHERE id = $1`,
-        [playerId]
-    );
-    if (playerResult.rows.length === 0) throw new Error('找不到道友的命格');
+  const playerResult = await db.query(
+    `SELECT ep, max_ep, hp, max_hp, sp, max_sp, aura,
+            last_sync_time, last_scan_time
+     FROM players WHERE id = $1`,
+    [playerId]
+  );
+  if (playerResult.rows.length === 0) throw new Error('找不到道友的命格');
 
-    const player = playerResult.rows[0];
-    const now    = new Date();
+  const player = playerResult.rows[0];
+  const now = new Date();
 
-    // Step 2: 冷卻判定（last_scan_time 欄位存在時才檢查）
-    if (player.last_scan_time) {
-        const elapsed = (now - new Date(player.last_scan_time)) / 1000;
-        if (elapsed < SCAN_COOLDOWN_SEC) {
-            const remaining = Math.ceil(SCAN_COOLDOWN_SEC - elapsed);
-            throw new Error(`靈覺尚未恢復，請稍後再次探索（剩餘 ${remaining} 秒）`);
-        }
+  if (player.last_scan_time) {
+    const elapsed = (now - new Date(player.last_scan_time)) / 1000;
+    if (elapsed < SCAN_COOLDOWN_SEC) {
+      const remaining = Math.ceil(SCAN_COOLDOWN_SEC - elapsed);
+      throw new Error(`靈覺尚未恢復，請稍後再次探索（剩餘 ${remaining} 秒）`);
     }
+  }
 
-    // Step 3: flush 離線 delta，以真實 EP 判斷是否足夠
-    const afterDelta = calculateOfflineDelta(player, now);
-
-    if (afterDelta.ep < 10) {
-        // 先把 delta flush 寫回（避免下次又重算），再拋錯
-        await db.query(
-            `UPDATE players SET hp = $1, sp = $2, ep = $3, last_sync_time = $4 WHERE id = $5`,
-            [afterDelta.hp, afterDelta.sp, afterDelta.ep, now, playerId]
-        );
-        throw new Error('精力不足');
-    }
-
-    // Step 4: 網格轉換
-    const gridId = getGridId(lat, lng);
-
-    // Step 5: 隨機生成 3~7 個節點
-    const nodeCount   = Math.floor(Math.random() * 5) + 3;
-    const templates   = await db.query(
-        `SELECT * FROM lbs_node_templates ORDER BY RANDOM() LIMIT $1`,
-        [nodeCount]
-    );
-
-    const generatedNodes = templates.rows.map((tmpl) => ({
-        instance_id:        crypto.randomUUID(),
-        type:               tmpl.node_type,
-        name:               tmpl.node_name,
-        description:        tmpl.mud_texts[Math.floor(Math.random() * tmpl.mud_texts.length)],
-        cost_sp:            tmpl.sp_cost,
-        cost_hp:            tmpl.hp_cost,
-        expires_in_seconds: 600,
-    }));
-
-    // Step 6: flush delta + 扣 EP + 更新 last_scan_time（一次 UPDATE）
-    const newEp = afterDelta.ep - 10;
+  const afterDelta = calculateOfflineDelta(player, now);
+  if (afterDelta.ep < 10) {
     await db.query(
-        `UPDATE players
-         SET hp = $1, sp = $2, ep = $3, last_sync_time = $4, last_scan_time = $4
-         WHERE id = $5`,
-        [afterDelta.hp, afterDelta.sp, newEp, now, playerId]
+      `UPDATE players SET hp=$1, sp=$2, ep=$3, last_sync_time=$4 WHERE id=$5`,
+      [afterDelta.hp, afterDelta.sp, afterDelta.ep, now, playerId]
     );
+    throw new Error('精力不足');
+  }
 
+  const gridId = getGridId(lat, lng);
+
+  // 查詢活躍世界事件
+  const eventResult = await db.query(
+    `SELECT * FROM world_events WHERE is_active = true AND expires_at > now()`
+  );
+
+  // 找最近的事件
+  let nearestEvent = null;
+  let nearestDistance = Infinity;
+  for (const event of eventResult.rows) {
+    const dist = getDistance(lat, lng, event.lat, event.lng);
+    if (dist < event.danger_radius && dist < nearestDistance) {
+      nearestEvent = event;
+      nearestDistance = dist;
+    }
+  }
+
+  // 根據距離決定危險等級
+  let zoneTier = 'safe';
+  if (nearestEvent) {
+    const ratio = nearestDistance / nearestEvent.danger_radius;
+    if (ratio < 0.3)      zoneTier = 'extreme';
+    else if (ratio < 0.6) zoneTier = 'danger';
+    else                  zoneTier = 'mid';
+  }
+
+  // 時間疊加
+  const hour = now.getHours();
+  if (hour >= 23 || hour < 5) {
+    if (zoneTier === 'safe')        zoneTier = 'mid';
+    else if (zoneTier === 'mid')    zoneTier = 'danger';
+    else if (zoneTier === 'danger') zoneTier = 'extreme';
+  }
+
+  // 危險等級對應突襲機率
+  const ambushRate = { safe: 0, mid: 0.15, danger: 0.4, extreme: 0.7 };
+
+  // 生成節點
+  const nodeCount = Math.floor(Math.random() * 5) + 3;
+  const templates = await db.query(
+    `SELECT * FROM lbs_node_templates ORDER BY RANDOM() LIMIT $1`,
+    [nodeCount]
+  );
+
+  const generatedNodes = templates.rows.map((tmpl) => {
+    const isAmbush = tmpl.node_type === '戰鬥' && Math.random() < ambushRate[zoneTier];
     return {
-        ep_remaining:     newEp,
-        aura_current:     player.aura,
-        grid_id:          gridId,
-        yield_multiplier: 1.0,
-        nodes:            generatedNodes,
+      instance_id:        crypto.randomUUID(),
+      type:               tmpl.node_type,
+      name:               isAmbush ? `【突襲】${tmpl.node_name}` : tmpl.node_name,
+      description:        isAmbush
+                            ? '煞氣驟然凝聚，妖獸已感應到你的神識！'
+                            : tmpl.mud_texts[Math.floor(Math.random() * tmpl.mud_texts.length)],
+      cost_sp:            tmpl.sp_cost,
+      cost_hp:            tmpl.hp_cost,
+      is_ambush:          isAmbush,
+      expires_in_seconds: 600,
     };
+  });
+
+  // flush + 扣 EP
+  const newEp = afterDelta.ep - 10;
+  await db.query(
+    `UPDATE players
+     SET hp=$1, sp=$2, ep=$3, last_sync_time=$4, last_scan_time=$4
+     WHERE id=$5`,
+    [afterDelta.hp, afterDelta.sp, newEp, now, playerId]
+  );
+
+  return {
+    ep_remaining:  newEp,
+    aura_current:  player.aura,
+    grid_id:       gridId,
+    zone_tier:     zoneTier,
+    nearest_event: nearestEvent ? {
+      name:     nearestEvent.name,
+      type:     nearestEvent.event_type,
+      distance: Math.round(nearestDistance),
+    } : null,
+    yield_multiplier: 1.0,
+    nodes:         generatedNodes,
+  };
 }
 
 export async function performExecution(playerId, nodeType, nodeName, stance = 'balanced') {
