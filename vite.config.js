@@ -17,7 +17,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon-192.png', 'icon-512.png'],
+      includeAssets: ['pwa-192x192.png'],
       manifest: {
         name:             '鏡界 Mirror Realm',
         short_name:       '鏡界',
@@ -27,9 +27,9 @@ export default defineConfig({
         display:          'standalone',
         start_url:        '/',
         icons: [
-          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-192x192.png', sizes: '512x512', type: 'image/png' },
+          { src: 'pwa-192x192.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
       workbox: {
