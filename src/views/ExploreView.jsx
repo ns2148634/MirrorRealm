@@ -44,24 +44,6 @@ const MAP_STYLE = {
   glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
 };
 
-// 根據方位角+距離算虛擬座標（前端版 offsetCoord）
-function offsetCoord(lat, lng, distM, angleDeg) {
-  const R = 6371000;
-  const brng = (angleDeg * Math.PI) / 180;
-  const φ1 = (lat * Math.PI) / 180;
-  const λ1 = (lng * Math.PI) / 180;
-  const φ2 = Math.asin(
-    Math.sin(φ1) * Math.cos(distM / R) +
-    Math.cos(φ1) * Math.sin(distM / R) * Math.cos(brng)
-  );
-  const λ2 =
-    λ1 +
-    Math.atan2(
-      Math.sin(brng) * Math.sin(distM / R) * Math.cos(φ1),
-      Math.cos(distM / R) - Math.sin(φ1) * Math.sin(φ2)
-    );
-  return { lat: (φ2 * 180) / Math.PI, lng: (λ2 * 180) / Math.PI };
-}
 
 export default function ExploreView() {
   const player        = useGameStore((state) => state.player);
@@ -137,31 +119,38 @@ export default function ExploreView() {
     mapRef.current?.setCenter([lng, lat]);
   };
 
-  // ── 計算節點螢幕位置 ───────────────────────────────────────────────
+  // ── 計算節點螢幕位置（純數學，不依賴地圖載入狀態）────────────────
+  // 將方位角+距離轉為畫面 top/left 百分比。
+  // 以畫面中心為玩家位置，200m 視野半徑對應 38% 半徑範圍（避免貼邊）。
   const computeNodePositions = (nodes, playerLat, playerLng) => {
-    const map = mapRef.current;
-    const container = mapContainerRef.current;
-    const hasMap = map && container && map.isStyleLoaded();
+    const hasGPS = playerLat != null && playerLng != null;
 
     return nodes.map((node, i) => {
-      const angle = (i * (360 / nodes.length) + Math.random() * 35) % 360;
-      const dist  = 60 + Math.random() * 220; // 60–280 公尺
+      const angle = (i * (360 / nodes.length) + Math.random() * 40 - 20 + 360) % 360;
+      const dist  = 60 + Math.random() * 200; // 60–260 公尺
 
-      if (hasMap && playerLat != null) {
-        const virtual = offsetCoord(playerLat, playerLng, dist, angle);
-        const px = map.project([virtual.lng, virtual.lat]);
-        const w  = container.offsetWidth  || 430;
-        const h  = container.offsetHeight || 800;
-        // 限制在 10%–90% 避免貼邊
-        const leftPct = Math.min(90, Math.max(10, (px.x / w) * 100));
-        const topPct  = Math.min(85, Math.max(10, (px.y / h) * 100));
-        return { ...node, top: `${topPct.toFixed(1)}%`, left: `${leftPct.toFixed(1)}%`, virtualLat: virtual.lat, virtualLng: virtual.lng };
+      if (hasGPS) {
+        // 把方位角和距離映射到畫面座標
+        // 最大顯示距離 300m → 最大半徑 38%（以 50% 為中心）
+        const MAX_DIST = 300;
+        const MAX_RADIUS = 38; // %
+        const r = Math.min(dist / MAX_DIST, 1) * MAX_RADIUS;
+
+        // 方位角 0=北=上，順時針，轉成 canvas 座標（-sin, -cos 讓北方朝上）
+        const rad = (angle * Math.PI) / 180;
+        const dx =  Math.sin(rad) * r;   // 正 = 右
+        const dy = -Math.cos(rad) * r;   // 正 = 下（螢幕 y 軸朝下）
+
+        const leftPct = Math.min(88, Math.max(12, 50 + dx));
+        const topPct  = Math.min(82, Math.max(12, 50 + dy));
+        return { ...node, top: `${topPct.toFixed(1)}%`, left: `${leftPct.toFixed(1)}%` };
       }
-      // Fallback：純隨機
+
+      // GPS 不可用 fallback
       return {
         ...node,
-        top:  `${Math.floor(Math.random() * 70 + 15)}%`,
-        left: `${Math.floor(Math.random() * 70 + 15)}%`,
+        top:  `${Math.floor(Math.random() * 60 + 20)}%`,
+        left: `${Math.floor(Math.random() * 60 + 20)}%`,
       };
     });
   };
@@ -347,22 +336,14 @@ export default function ExploreView() {
             };
           });
 
-          // 等地圖樣式載入後計算螢幕位置
-          const assignPositions = () => {
-            const withPos = computeNodePositions(mapped, lat, lng);
-            setEvents(withPos);
-            setTerrains([{ id: 't1', ...TERRAIN_MAPPING['water'], top: '30%', left: '70%' }]);
-            setIsScanning(false);
-            if (reduceEp) reduceEp(10);
-          };
-
-          if (mapRef.current?.isStyleLoaded()) {
-            assignPositions();
-          } else {
-            mapRef.current?.once('load', assignPositions);
-            // 若地圖已無法觸發 load（已載入但 once 不觸發），0ms 後 fallback
-            setTimeout(() => { if (isScanning) assignPositions(); }, 500);
-          }
+          // 純數學定位，不依賴地圖載入狀態，直接計算
+          const withPos = computeNodePositions(mapped, lat, lng);
+          setEvents(withPos);
+          setTerrains([{ id: 't1', ...TERRAIN_MAPPING['water'], top: '30%', left: '70%' }]);
+          setIsScanning(false);
+          if (reduceEp) reduceEp(10);
+          // 地圖置中（非同步，不阻塞節點顯示）
+          centerMapOnPlayer(lat, lng);
 
         } catch {
           fallbackScan();
