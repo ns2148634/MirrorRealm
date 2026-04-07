@@ -39,15 +39,19 @@ const RARITY_COLORS = {
   red:    { border: '#FF3B30', bg: 'rgba(255,59,48,0.05)',   shadow: 'rgba(255,59,48,0.4)'   },
 };
 
-// ── 統一「抽離神識」按鈕元件 ─────────────────────────────────────
-function ReturnBtn({ onClick, label = '抽離神識' }) {
+// ── 統一「收回神識」底部返回列 ────────────────────────────────────
+function ReturnBar({ onClick, label = '收回神識' }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-2 border border-white/10 bg-black/40 px-4 py-1.5 rounded-full text-gray-400 hover:text-white tracking-widest text-[clamp(13px,3.8cqw,15px)] active:scale-95 transition-all"
-    >
-      <span className="text-lg leading-none mt-[-2px]">‹</span> {label}
-    </button>
+    <div className="w-full shrink-0 bg-gradient-to-t from-black via-black/80 to-transparent pt-[8cqw]">
+      <div className="px-[6cqw] pb-[6cqw]">
+        <button
+          onClick={onClick}
+          className="flex items-center gap-2 border border-white/10 bg-black/40 px-4 py-1.5 rounded-full text-gray-400 hover:text-white tracking-widest text-[clamp(13px,3.8cqw,15px)] active:scale-95 transition-all"
+        >
+          <span className="text-lg leading-none mt-[-2px]">‹</span> {label}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -171,7 +175,6 @@ export default function WorldView() {
   const showList       = ['list', 'entering-list', 'exiting-list', 'entering-item', 'exiting-item'].includes(viewState);
   const showItemDetail = ['item-detail', 'entering-item', 'exiting-item'].includes(viewState);
 
-  const activeTabMeta  = TABS.find(t => t.id === activeTab);
   const subNodes       = activeTab ? (SUB_NODES[activeTab] ?? []) : [];
 
   // confirm 對話文字
@@ -244,28 +247,19 @@ export default function WorldView() {
           ${viewState === 'entering-sub' ? 'anim-zoom-in pointer-events-none' : ''}
           ${viewState === 'exiting-sub'  ? 'anim-shrink-out pointer-events-none' : ''}
         `}>
-          {/* 標題 */}
-          <div className="absolute top-[6cqw] w-full text-center z-10 pointer-events-none">
-            <span className="text-[clamp(16px,5cqw,20px)] tracking-[0.5em] drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]"
-              style={{ color: activeTabMeta?.color ?? '#FFD700' }}
-            >
-              {activeTabMeta?.label}
-            </span>
-          </div>
 
-          {/* 子圖標星圖 */}
-          <div className="relative w-full h-full">
-            {subNodes.map((node) => (
-              <div key={node.id} className="absolute z-10"
-                style={{ top: node.pos.top, left: node.pos.left, transform: 'translate(-50%, -50%)' }}
-              >
+          {/* 天機：上中下垂直置中排列 */}
+          {activeTab === 'settings' ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-[8cqw] px-[8cqw]">
+              {subNodes.map((node) => (
                 <div
+                  key={node.id}
                   onClick={() => viewState === 'sub' && handleSubNodeClick(node)}
                   className="flex flex-col items-center gap-2 cursor-pointer group active:scale-95 transition-all duration-300 animate-float"
                   style={{ animationDelay: node.delay }}
                 >
                   <div className="w-[18cqw] h-[18cqw] max-w-[75px] max-h-[75px] flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
-                    <img src={`/images/icons/${node.icon}.svg`} alt={node.label}
+                    <img src={`/images/icons/${node.icon}`} alt={node.label}
                       className="w-full h-full object-contain opacity-90"
                       style={{ filter: `drop-shadow(0 0 18px ${node.color}) drop-shadow(0 0 35px ${node.color}55)` }}
                     />
@@ -274,9 +268,34 @@ export default function WorldView() {
                     {node.label}
                   </span>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            /* 仙坊 / 懸賞：星圖散點排列 */
+            <div className="relative flex-1 w-full">
+              {subNodes.map((node) => (
+                <div key={node.id} className="absolute z-10"
+                  style={{ top: node.pos.top, left: node.pos.left, transform: 'translate(-50%, -50%)' }}
+                >
+                  <div
+                    onClick={() => viewState === 'sub' && handleSubNodeClick(node)}
+                    className="flex flex-col items-center gap-2 cursor-pointer group active:scale-95 transition-all duration-300 animate-float"
+                    style={{ animationDelay: node.delay }}
+                  >
+                    <div className="w-[18cqw] h-[18cqw] max-w-[75px] max-h-[75px] flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
+                      <img src={`/images/icons/${node.icon}`} alt={node.label}
+                        className="w-full h-full object-contain opacity-90"
+                        style={{ filter: `drop-shadow(0 0 18px ${node.color}) drop-shadow(0 0 35px ${node.color}55)` }}
+                      />
+                    </div>
+                    <span className="text-[11px] tracking-[0.3em] opacity-70" style={{ color: node.color }}>
+                      {node.label}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* 確認對話框（天機子節點動作） */}
           {confirmAction && (
@@ -307,10 +326,7 @@ export default function WorldView() {
             </div>
           )}
 
-          {/* 底部返回 */}
-          <div className="absolute bottom-[calc(env(safe-area-inset-bottom,20px)+10cqw)] w-full flex justify-center z-10">
-            <ReturnBtn onClick={handleReturnOverview} />
-          </div>
+          <ReturnBar onClick={handleReturnOverview} />
         </div>
       )}
 
@@ -378,14 +394,7 @@ export default function WorldView() {
             )}
           </div>
 
-          <div className="w-full shrink-0 bg-gradient-to-t from-black via-black/80 to-transparent pt-[8cqw]">
-            <div className="px-[6cqw] pb-[6cqw] flex justify-between items-center">
-              <ReturnBtn onClick={handleReturnOverview} />
-              <span className="text-[#FFD700] tracking-[0.4em] text-[clamp(15px,4.5cqw,19px)] drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
-                {activeTabMeta?.label}
-              </span>
-            </div>
-          </div>
+          <ReturnBar onClick={handleReturnOverview} />
         </div>
       )}
 
@@ -420,11 +429,7 @@ export default function WorldView() {
             </p>
           </div>
 
-          <div className="w-full shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent pt-[8cqw]">
-            <div className="px-[6cqw] pb-[6cqw] flex justify-start">
-              <ReturnBtn onClick={handleReturnList} label="返回" />
-            </div>
-          </div>
+          <ReturnBar onClick={handleReturnList} label="返回" />
         </div>
       )}
     </div>
