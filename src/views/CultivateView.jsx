@@ -252,23 +252,6 @@ export default function CultivateView() {
         .animate-shrink-in-fade { animation: shrink-in-fade 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
       `}</style>
 
-      {/* 🌟 L2 懸浮按鈕：純絕對定位，L1 時不佔任何排版空間 */}
-      <div className={`absolute top-[4vh] left-0 right-0 flex justify-between items-center px-[8cqw] transition-all duration-300 z-50 ${getL2AnimationClass()}`}>
-        <button onClick={handleReturnOverview} className="flex items-center gap-2 border border-white/10 bg-black/40 px-4 py-1.5 rounded-full text-gray-400 hover:text-white tracking-widest text-[clamp(13px,3.8cqw,15px)] active:scale-95 transition-all">
-          <span className="text-lg leading-none mt-[-2px]">‹</span> 收回神識
-        </button>
-        <button
-          onClick={handleSaveConfiguration} disabled={!isModified || isSaving}
-          className={`px-4 py-1.5 rounded-full text-[12px] tracking-[0.3em] transition-all duration-300 border ${
-            isSaving ? 'bg-white/20 border-white/40 text-white animate-pulse' :
-            isModified && !isOverloaded ? `bg-[${auraColor}]/20 border-[${auraColor}] text-[${auraColor}] shadow-[0_0_15px_${auraColor}40] active:scale-95`
-              : 'bg-black/50 border-white/10 text-gray-500 cursor-not-allowed'
-          }`}
-        >
-          {isSaving ? '周天運轉...' : '銘記法陣'}
-        </button>
-      </div>
-
       <div className="flex-1 flex flex-col px-[5cqw] pb-[calc(env(safe-area-inset-bottom,20px)+2vh)] overflow-hidden">
         
         {/* =========================================
@@ -378,6 +361,28 @@ export default function CultivateView() {
               <div className="h-[4px] bg-black/60 rounded-full overflow-hidden border border-white/10">
                 <div className={`h-full rounded-full transition-all duration-500 ${isOverloaded ? 'bg-[#FF3B30] shadow-[0_0_10px_#FF3B30]' : 'bg-[#FFD700] shadow-[0_0_8px_#FFD700]'}`} style={{ width: `${Math.min(100, (currentLoad / maxGodSense) * 100)}%` }}></div>
               </div>
+            </div>
+
+            {/* 底部操作列：收回神識 + 銘記法陣 */}
+            <div className="w-full shrink-0 flex justify-between items-center pb-[1vh] pt-[1vh]">
+              <button onClick={handleReturnOverview} className="flex items-center gap-2 border border-white/10 bg-black/40 px-4 py-1.5 rounded-full text-gray-400 hover:text-white tracking-widest text-[clamp(13px,3.8cqw,15px)] active:scale-95 transition-all">
+                <span className="text-lg leading-none mt-[-2px]">‹</span> 收回神識
+              </button>
+              <button
+                onClick={handleSaveConfiguration} disabled={!isModified || isSaving}
+                className={`px-4 py-1.5 rounded-full text-[12px] tracking-[0.3em] transition-all duration-300 border ${
+                  isSaving ? 'bg-white/20 border-white/40 text-white animate-pulse' :
+                  isModified && !isOverloaded ? 'active:scale-95' : 'bg-black/50 border-white/10 text-gray-500 cursor-not-allowed'
+                }`}
+                style={isModified && !isOverloaded && !isSaving ? {
+                  background: `${auraColor}20`,
+                  border: `1px solid ${auraColor}`,
+                  color: auraColor,
+                  boxShadow: `0 0 15px ${auraColor}40`,
+                } : {}}
+              >
+                {isSaving ? '周天運轉...' : '銘記法陣'}
+              </button>
             </div>
           </div>
 

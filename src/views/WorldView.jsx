@@ -14,19 +14,19 @@ const TABS = [
 // ── L2：子類別節點（仙坊、懸賞、天機走子類 icon；道友/宗門走數據列表）
 const SUB_NODES = {
   market: [
-    { id: 'store_official',  label: '官方珍寶', icon: 'icon_store_official',  color: '#FFD700', pos: { top: '30%', left: '20%' }, delay: '0s'   },
-    { id: 'store_player',    label: '散修市集', icon: 'icon_store_player',    color: '#00E5FF', pos: { top: '55%', left: '50%' }, delay: '0.4s' },
-    { id: 'store_recharge',  label: '靈石注資', icon: 'icon_store_recharge',  color: '#32D74B', pos: { top: '30%', left: '80%' }, delay: '0.8s' },
+    { id: 'store_official',  label: '官方珍寶', icon: 'icon_store_official.svg',  color: '#FFD700', pos: { top: '30%', left: '20%' }, delay: '0s'   },
+    { id: 'store_player',    label: '散修市集', icon: 'icon_store_player.svg',    color: '#00E5FF', pos: { top: '55%', left: '50%' }, delay: '0.4s' },
+    { id: 'store_recharge',  label: '靈石注資', icon: 'icon_store_recharge.svg',  color: '#32D74B', pos: { top: '30%', left: '80%' }, delay: '0.8s' },
   ],
   bounty: [
-    { id: 'bounty_kill',    label: '誅殺',  icon: 'icon_bounty_kill',    color: '#FF3B30', pos: { top: '28%', left: '20%' }, delay: '0s'   },
-    { id: 'bounty_collect', label: '採集',  icon: 'icon_bounty_collect', color: '#32D74B', pos: { top: '55%', left: '50%' }, delay: '0.4s' },
-    { id: 'bounty_info',    label: '情報',  icon: 'icon_bounty_info',    color: '#00E5FF', pos: { top: '28%', left: '80%' }, delay: '0.8s' },
+    { id: 'bounty_kill',    label: '誅殺',  icon: 'icon_bounty_kill.svg',    color: '#FF3B30', pos: { top: '28%', left: '20%' }, delay: '0s'   },
+    { id: 'bounty_collect', label: '採集',  icon: 'icon_bounty_collect.svg', color: '#32D74B', pos: { top: '55%', left: '50%' }, delay: '0.4s' },
+    { id: 'bounty_info',    label: '情報',  icon: 'icon_bounty_info.svg',    color: '#00E5FF', pos: { top: '28%', left: '80%' }, delay: '0.8s' },
   ],
   settings: [
-    { id: 'set_logout', label: '離開仙途', icon: 'icon_set_logout', color: '#00E5FF', pos: { top: '28%', left: '20%' }, delay: '0s',   action: 'logout' },
-    { id: 'set_reborn', label: '輪迴重生', icon: 'icon_set_reborn', color: '#FF9500', pos: { top: '55%', left: '50%' }, delay: '0.4s', action: 'reborn' },
-    { id: 'set_delete', label: '道消形滅', icon: 'icon_set_delete', color: '#FF3B30', pos: { top: '28%', left: '80%' }, delay: '0.8s', action: 'delete' },
+    { id: 'set_logout', label: '離開仙途', icon: 'icon_set_logout.svg', color: '#00E5FF', pos: { top: '28%', left: '20%' }, delay: '0s',   action: 'logout' },
+    { id: 'set_reborn', label: '輪迴重生', icon: 'icon_set_reborn.svg', color: '#FF9500', pos: { top: '55%', left: '50%' }, delay: '0.4s', action: 'reborn' },
+    { id: 'set_delete', label: '道消形滅', icon: 'icon_set_delete.svg', color: '#FF3B30', pos: { top: '28%', left: '80%' }, delay: '0.8s', action: 'delete' },
   ],
 };
 
