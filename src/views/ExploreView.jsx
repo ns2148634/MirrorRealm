@@ -94,12 +94,11 @@ export default function ExploreView() {
         attributionControl: false,
       });
 
-      map.on('load', () => {
-        const canvas = mapContainerRef.current?.querySelector('canvas');
-        if (canvas) {
-          canvas.style.filter = 'grayscale(1) invert(1) brightness(0.20) contrast(1.3) sepia(0.3)';
-        }
-      });
+      // filter 套在容器 div 上（比 canvas 更可靠）
+      if (mapContainerRef.current) {
+        mapContainerRef.current.style.filter =
+          'grayscale(1) invert(1) brightness(0.45) contrast(1.3)';
+      }
 
       mapRef.current = map;
     }).catch((err) => {
@@ -119,39 +118,47 @@ export default function ExploreView() {
     mapRef.current?.setCenter([lng, lat]);
   };
 
-  // ── 計算節點螢幕位置（純數學，不依賴地圖載入狀態）────────────────
-  // 將方位角+距離轉為畫面 top/left 百分比。
-  // 以畫面中心為玩家位置，200m 視野半徑對應 38% 半徑範圍（避免貼邊）。
+  // ── 從兩點座標計算方位角（0=北，順時針）──────────────────────────
+  const getBearing = (lat1, lng1, lat2, lng2) => {
+    const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+    const Δλ = (lng2 - lng1) * Math.PI / 180;
+    const y = Math.sin(Δλ) * Math.cos(φ2);
+    const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  };
+
+  // ── 計算節點螢幕位置（方位角+距離 → top/left %）────────────────────
+  // 最大顯示距離 300m 對應最大半徑 38%（以 50% 為中心），避免貼邊
   const computeNodePositions = (nodes, playerLat, playerLng) => {
+    const MAX_DIST   = 300;
+    const MAX_RADIUS = 38;
     const hasGPS = playerLat != null && playerLng != null;
 
     return nodes.map((node, i) => {
-      const angle = (i * (360 / nodes.length) + Math.random() * 40 - 20 + 360) % 360;
-      const dist  = 60 + Math.random() * 200; // 60–260 公尺
+      let angle, dist;
 
-      if (hasGPS) {
-        // 把方位角和距離映射到畫面座標
-        // 最大顯示距離 300m → 最大半徑 38%（以 50% 為中心）
-        const MAX_DIST = 300;
-        const MAX_RADIUS = 38; // %
-        const r = Math.min(dist / MAX_DIST, 1) * MAX_RADIUS;
-
-        // 方位角 0=北=上，順時針，轉成 canvas 座標（-sin, -cos 讓北方朝上）
-        const rad = (angle * Math.PI) / 180;
-        const dx =  Math.sin(rad) * r;   // 正 = 右
-        const dy = -Math.cos(rad) * r;   // 正 = 下（螢幕 y 軸朝下）
-
-        const leftPct = Math.min(88, Math.max(12, 50 + dx));
-        const topPct  = Math.min(82, Math.max(12, 50 + dy));
-        return { ...node, top: `${topPct.toFixed(1)}%`, left: `${leftPct.toFixed(1)}%` };
+      if (hasGPS && node.node_lat != null && node.node_lng != null) {
+        // 真實方位：從玩家座標到節點座標
+        angle = getBearing(playerLat, playerLng, node.node_lat, node.node_lng);
+        // Haversine 距離（直接用 getDistance 邏輯在前端計算）
+        const R    = 6371000;
+        const dLat = (node.node_lat - playerLat) * Math.PI / 180;
+        const dLng = (node.node_lng - playerLng) * Math.PI / 180;
+        const a    = Math.sin(dLat/2) ** 2 + Math.cos(playerLat * Math.PI/180) * Math.cos(node.node_lat * Math.PI/180) * Math.sin(dLng/2) ** 2;
+        dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      } else {
+        // Fallback：平均分散在圓周上
+        angle = (i * (360 / nodes.length) + Math.random() * 40 - 20 + 360) % 360;
+        dist  = 60 + Math.random() * 200;
       }
 
-      // GPS 不可用 fallback
-      return {
-        ...node,
-        top:  `${Math.floor(Math.random() * 60 + 20)}%`,
-        left: `${Math.floor(Math.random() * 60 + 20)}%`,
-      };
+      const r   = Math.min(dist / MAX_DIST, 1) * MAX_RADIUS;
+      const rad = angle * Math.PI / 180;
+      const dx  =  Math.sin(rad) * r;
+      const dy  = -Math.cos(rad) * r;
+      const leftPct = Math.min(88, Math.max(12, 50 + dx));
+      const topPct  = Math.min(82, Math.max(12, 50 + dy));
+      return { ...node, top: `${topPct.toFixed(1)}%`, left: `${leftPct.toFixed(1)}%` };
     });
   };
 
@@ -332,6 +339,8 @@ export default function ExploreView() {
               cost:        { sp: node.cost_sp, hp: node.cost_hp },
               nodeType:    node.type,
               isAmbush:    node.is_ambush,
+              node_lat:    node.node_lat,
+              node_lng:    node.node_lng,
               ...mapping,
             };
           });

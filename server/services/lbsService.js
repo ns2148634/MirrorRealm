@@ -1,6 +1,6 @@
 // server/services/lbsService.js
 import * as db from '../config/db.js';
-import { getGridId, getDistance } from '../utils/geoUtils.js';
+import { getGridId, getDistance, getOffsetCoord } from '../utils/geoUtils.js';
 import { calculateOfflineDelta } from '../lib/recovery.js';
 import crypto from 'crypto';
 import { runCombat } from './combatService.js';
@@ -91,8 +91,14 @@ export async function performScan(playerId, lat, lng) {
     [nodeCount]
   );
 
-  const generatedNodes = templates.rows.map((tmpl) => {
+  // 節點平均分散在 360° 圓周上，加隨機 ±20° 擾動，距離 60–260m
+  const totalNodes = templates.rows.length;
+  const generatedNodes = templates.rows.map((tmpl, idx) => {
     const isAmbush = tmpl.node_type === '戰鬥' && Math.random() < ambushRate[zoneTier];
+    const baseAngle = (idx / totalNodes) * 360;
+    const angle     = (baseAngle + Math.random() * 40 - 20 + 360) % 360;
+    const distM     = 60 + Math.random() * 200;
+    const { lat: nodeLat, lng: nodeLng } = getOffsetCoord(lat, lng, distM, angle);
     return {
       instance_id:        crypto.randomUUID(),
       type:               tmpl.node_type,
@@ -104,6 +110,8 @@ export async function performScan(playerId, lat, lng) {
       cost_hp:            tmpl.hp_cost,
       is_ambush:          isAmbush,
       expires_in_seconds: 600,
+      node_lat:           nodeLat,
+      node_lng:           nodeLng,
     };
   });
 
