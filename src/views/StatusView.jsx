@@ -6,15 +6,11 @@ export default function StatusView() {
   const player         = useGameStore((s) => s.player);
   const realmTemplates = useGameStore((s) => s.realmTemplates);
   const setPlayer      = useGameStore((s) => s.setPlayer);
-  const signOut        = useGameStore((s) => s.signOut);
   const canvasRef      = useRef(null);
 
   const [isBreaking,    setIsBreaking]    = useState(false);
   const [breakMessage,  setBreakMessage]  = useState('');
   const [showFlash,     setShowFlash]     = useState(false);
-  const [showSettings,  setShowSettings]  = useState(false);
-  const [settingsMsg,   setSettingsMsg]   = useState('');
-  const [confirmAction, setConfirmAction] = useState(null); // 'delete' | 'reborn'
 
   // ── 境界動態計算（依 realmTemplates）────────────────────────────
   const realmLevel   = player?.realm_level ?? 1;
@@ -142,41 +138,6 @@ export default function StatusView() {
     }
   };
 
-  // ── 刪除帳號 ────────────────────────────────────────────────────
-  const handleDeleteAccount = async () => {
-    setSettingsMsg('');
-    try {
-      const res    = await fetch('/api/auth/delete', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ playerId: player.id }),
-      });
-      const result = await res.json();
-      if (!res.ok) { setSettingsMsg(result.message ?? '刪除失敗'); return; }
-      await signOut();
-    } catch {
-      setSettingsMsg('刪除失敗，請稍後再試');
-    }
-  };
-
-  // ── 重生 ────────────────────────────────────────────────────────
-  const handleReborn = async () => {
-    setSettingsMsg('');
-    try {
-      const res    = await fetch('/api/player/reborn', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ playerId: player.id }),
-      });
-      const result = await res.json();
-      if (!res.ok) { setSettingsMsg(result.message ?? '重生失敗'); return; }
-      // 重生後回到創角畫面（store 需重新 sync）
-      await signOut();
-    } catch {
-      setSettingsMsg('重生失敗，請稍後再試');
-    }
-  };
-
   // ── 聲望 / 煞氣 稱號 ────────────────────────────────────────────
   const getGoodTitle = (karma) => {
     if ((karma ?? 0) > 1000) return '名動天下';
@@ -287,140 +248,6 @@ export default function StatusView() {
           ${breakMessage.includes('成功') ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>
           {breakMessage}
         </p>
-      )}
-
-      {/* ── 天機設定 Modal ──────────────────────────────────────────── */}
-      {showSettings && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowSettings(false); }}
-        >
-          <div className="w-full max-w-[320px] mx-4 flex flex-col gap-3 px-6 py-8"
-            style={{
-              background: 'rgba(10,12,18,0.92)',
-              border: '1px solid rgba(0,229,255,0.2)',
-              borderRadius: '1rem',
-              boxShadow: '0 0 40px rgba(0,229,255,0.08)',
-            }}
-          >
-            {/* 標題 */}
-            <div className="text-center mb-2">
-              <div className="text-[18px] tracking-[0.5em] font-serif text-white/80">天　機</div>
-              <div className="w-12 h-[1px] bg-[#00E5FF]/30 mx-auto mt-2" />
-            </div>
-
-            {/* 尚未確認狀態 */}
-            {!confirmAction && (
-              <>
-                {/* 登出 */}
-                <button
-                  onClick={async () => { setShowSettings(false); await signOut(); }}
-                  className="w-full py-3 rounded-lg text-[15px] tracking-[0.3em] font-serif transition-all active:scale-95"
-                  style={{
-                    background: 'rgba(0,229,255,0.06)',
-                    border: '1px solid rgba(0,229,255,0.25)',
-                    color: 'rgba(200,240,255,0.8)',
-                  }}
-                >
-                  離開仙途（登出）
-                </button>
-
-                {/* 重生 */}
-                <button
-                  onClick={() => setConfirmAction('reborn')}
-                  className="w-full py-3 rounded-lg text-[15px] tracking-[0.3em] font-serif transition-all active:scale-95"
-                  style={{
-                    background: 'rgba(255,140,0,0.06)',
-                    border: '1px solid rgba(255,140,0,0.3)',
-                    color: 'rgba(255,180,80,0.85)',
-                  }}
-                >
-                  輪迴重生（重置角色）
-                </button>
-
-                {/* 刪除帳號 */}
-                <button
-                  onClick={() => setConfirmAction('delete')}
-                  className="w-full py-3 rounded-lg text-[15px] tracking-[0.3em] font-serif transition-all active:scale-95"
-                  style={{
-                    background: 'rgba(255,59,48,0.06)',
-                    border: '1px solid rgba(255,59,48,0.3)',
-                    color: 'rgba(255,100,90,0.85)',
-                  }}
-                >
-                  道消形滅（刪除帳號）
-                </button>
-
-                {settingsMsg && (
-                  <p className="text-center text-[13px] text-red-400 tracking-wider">{settingsMsg}</p>
-                )}
-
-                {/* 關閉 */}
-                <button
-                  onClick={() => setShowSettings(false)}
-                  className="mt-2 w-full py-2 text-[13px] tracking-[0.3em] font-serif text-white/30 hover:text-white/60 transition-colors"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  返回
-                </button>
-              </>
-            )}
-
-            {/* 確認：重生 */}
-            {confirmAction === 'reborn' && (
-              <>
-                <p className="text-center text-[14px] tracking-wider font-serif text-white/70 leading-relaxed">
-                  輪迴重生將清除所有修為與角色資料，<br/>重新踏上仙途。
-                  <br/><span className="text-orange-400/80">此操作無法復原。</span>
-                </p>
-                <button
-                  onClick={handleReborn}
-                  className="w-full py-3 rounded-lg text-[15px] tracking-[0.3em] font-serif active:scale-95"
-                  style={{ background: 'rgba(255,140,0,0.15)', border: '1px solid rgba(255,140,0,0.5)', color: '#FFAA40' }}
-                >
-                  確認重生
-                </button>
-                {settingsMsg && (
-                  <p className="text-center text-[13px] text-red-400 tracking-wider">{settingsMsg}</p>
-                )}
-                <button
-                  onClick={() => setConfirmAction(null)}
-                  className="w-full py-2 text-[13px] tracking-[0.3em] font-serif text-white/30 hover:text-white/60 transition-colors"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  取消
-                </button>
-              </>
-            )}
-
-            {/* 確認：刪除帳號 */}
-            {confirmAction === 'delete' && (
-              <>
-                <p className="text-center text-[14px] tracking-wider font-serif text-white/70 leading-relaxed">
-                  道消形滅將永久刪除帳號與所有資料，<br/>
-                  <span className="text-red-400/80">此操作無法復原。</span>
-                </p>
-                <button
-                  onClick={handleDeleteAccount}
-                  className="w-full py-3 rounded-lg text-[15px] tracking-[0.3em] font-serif active:scale-95"
-                  style={{ background: 'rgba(255,59,48,0.15)', border: '1px solid rgba(255,59,48,0.5)', color: '#FF6B6B' }}
-                >
-                  確認刪除
-                </button>
-                {settingsMsg && (
-                  <p className="text-center text-[13px] text-red-400 tracking-wider">{settingsMsg}</p>
-                )}
-                <button
-                  onClick={() => setConfirmAction(null)}
-                  className="w-full py-2 text-[13px] tracking-[0.3em] font-serif text-white/30 hover:text-white/60 transition-colors"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  取消
-                </button>
-              </>
-            )}
-          </div>
-        </div>
       )}
 
       <style>{`

@@ -1,5 +1,5 @@
 // server/controllers/playerController.js
-import { getBackpack, getPlayerStatus, meditate, useItem, breakthrough, getEquipment, equipItem, unequipItem } from '../services/playerService.js';
+import { getBackpack, getPlayerStatus, meditate, useItem, breakthrough, getEquipment, equipItem, unequipItem, getFriends, getSect } from '../services/playerService.js';
 
 export async function getPlayerStatusHandler(req, res) {
     try {
@@ -105,5 +105,31 @@ export async function unequipPlayerItem(req, res) {
     } catch (error) {
         const is400 = error.message.includes('尚未裝備');
         return res.status(is400 ? 400 : 500).json({ status: 'error', message: error.message });
+    }
+}
+
+export async function getPlayerFriends(req, res) {
+    try {
+        const { playerId } = req.query;
+        if (!playerId) return res.status(400).json({ status: 'error', message: '缺少玩家 ID' });
+
+        const friends = await getFriends(playerId);
+        return res.status(200).json({ status: 'success', friends });
+    } catch (error) {
+        console.error('道友查詢失敗:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
+    }
+}
+
+export async function getPlayerSect(req, res) {
+    try {
+        const { playerId } = req.query;
+        if (!playerId) return res.status(400).json({ status: 'error', message: '缺少玩家 ID' });
+
+        const sect = await getSect(playerId);
+        return res.status(200).json({ status: 'success', sect });
+    } catch (error) {
+        console.error('宗門查詢失敗:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
     }
 }

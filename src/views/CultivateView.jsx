@@ -254,7 +254,7 @@ export default function CultivateView() {
 
       {/* 🌟 L2 懸浮按鈕：純絕對定位，L1 時不佔任何排版空間 */}
       <div className={`absolute top-[4vh] left-0 right-0 flex justify-between items-center px-[8cqw] transition-all duration-300 z-50 ${getL2AnimationClass()}`}>
-        <button onClick={handleReturnOverview} className="text-gray-400 hover:text-white tracking-widest text-[14px] flex items-center gap-1 active:scale-95 transition-all">
+        <button onClick={handleReturnOverview} className="flex items-center gap-2 border border-white/10 bg-black/40 px-4 py-1.5 rounded-full text-gray-400 hover:text-white tracking-widest text-[clamp(13px,3.8cqw,15px)] active:scale-95 transition-all">
           <span className="text-lg leading-none mt-[-2px]">‹</span> 收回神識
         </button>
         <button
@@ -327,17 +327,17 @@ export default function CultivateView() {
   <div className="relative w-full flex-grow mt-[2vh]">
     
     {/* 主功法 (左上方，最大) */}
-    <div className="absolute top-[5%] left-[16%] scale-[1.5] z-10">
+    <div className="absolute top-[10%] left-[20%] scale-[2] z-10">
       <FloatingIcon type="main" isActive={true} hideCount={true} color={auraColor} delay="0s" onClick={() => handleBrowseLibrary('main')} />
     </div>
 
     {/* 副功法 (右方偏中，次大) */}
-    <div className="absolute top-[25%] right-[15%] scale-[1.3] z-10">
+    <div className="absolute top-[25%] right-[18%] scale-[2] z-10">
       <FloatingIcon type="sub" isActive={true} hideCount={true} color={auraColor} delay="0.8s" onClick={() => handleBrowseLibrary('sub')} />
     </div>
 
     {/* 陣法 (左方偏下，次大) */}
-    <div className="absolute bottom-[10%] left-[45%] -translate-x-1/2 scale-[1.4] z-10">
+    <div className="absolute bottom-[15%] left-[45%] -translate-x-1/2 scale-[2] z-10">
       <FloatingIcon type="formation" isActive={true} hideCount={true} color={auraColor} delay="1.5s" onClick={() => handleBrowseLibrary('formation')} />
     </div>
 

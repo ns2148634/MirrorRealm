@@ -377,3 +377,67 @@ export async function unequipItem(playerId, slot) {
         client.release();
     }
 }
+
+
+// ── 道友列表 ────────────────────────────────────────────────────────
+export async function getFriends(playerId) {
+    try {
+        const result = await db.query(
+            `SELECT
+                 p.id,
+                 p.name,
+                 p.realm_name,
+                 p.realm_level,
+                 f.created_at AS friends_since
+             FROM friendships f
+             JOIN players p ON p.id = CASE
+                 WHEN f.player_a_id = $1 THEN f.player_b_id
+                 ELSE f.player_a_id
+             END
+             WHERE (f.player_a_id = $1 OR f.player_b_id = $1)
+               AND f.status = 'accepted'
+             ORDER BY p.realm_level DESC, p.name`,
+            [playerId]
+        );
+        return result.rows;
+    } catch {
+        // friendships 表尚未建立時，回傳空陣列而不 crash
+        return [];
+    }
+}
+
+// ── 宗門資訊 ────────────────────────────────────────────────────────
+export async function getSect(playerId) {
+    try {
+        const result = await db.query(
+            `SELECT
+                 s.id,
+                 s.name         AS sect_name,
+                 s.description,
+                 s.member_count,
+                 sm.role,
+                 sm.joined_at
+             FROM sect_members sm
+             JOIN sects s ON s.id = sm.sect_id
+             WHERE sm.player_id = $1
+             LIMIT 1`,
+            [playerId]
+        );
+        if (result.rows.length === 0) return null;
+        const row = result.rows[0];
+
+        // 取宗門成員列表
+        const members = await db.query(
+            `SELECT p.id, p.name, p.realm_name, p.realm_level, sm.role
+             FROM sect_members sm
+             JOIN players p ON p.id = sm.player_id
+             WHERE sm.sect_id = $1
+             ORDER BY sm.role DESC, p.realm_level DESC`,
+            [row.id]
+        );
+        return { ...row, members: members.rows };
+    } catch {
+        // sects / sect_members 表尚未建立時，回傳 null 而不 crash
+        return null;
+    }
+}

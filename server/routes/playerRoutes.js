@@ -9,11 +9,15 @@ import {
     breakthroughPlayer,
     equipPlayerItem,
     unequipPlayerItem,
+    getPlayerFriends,
+    getPlayerSect,
 } from '../controllers/playerController.js';
 
 const router = express.Router();
 
 // GET 具名路由必須放在 /:playerId 萬用路由之前，否則會被攔截
+router.get('/friends',              getPlayerFriends);
+router.get('/sect',                 getPlayerSect);
 router.get('/backpack/:playerId',   getPlayerBackpack);
 router.get('/equipment/:playerId',  getPlayerEquipment);
 router.get('/:playerId',            getPlayerStatusHandler);
