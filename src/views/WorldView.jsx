@@ -250,23 +250,24 @@ export default function WorldView() {
 
           {/* 天機：上中下垂直置中排列 */}
           {activeTab === 'settings' ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-[8cqw] px-[8cqw]">
+            // 稍微加大圖標之間的間距 (gap-[8cqw] -> gap-[10cqw])
+            <div className="flex-1 flex flex-col items-center justify-center gap-[10cqw] px-[8cqw]">
               {subNodes.map((node) => (
                 <div
                   key={node.id}
                   onClick={() => viewState === 'sub' && handleSubNodeClick(node)}
-                  className="flex flex-col items-center gap-2 cursor-pointer group active:scale-95 transition-all duration-300 animate-float"
+                  className="flex flex-col items-center cursor-pointer group active:scale-95 transition-all duration-300 animate-float"
                   style={{ animationDelay: node.delay }}
                 >
-                  <div className="w-[18cqw] h-[18cqw] max-w-[75px] max-h-[75px] flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
+                  {/* 放大圖標尺寸：將原本的 18cqw/75px 加大為 28cqw/110px */}
+                  <div className="w-[28cqw] h-[28cqw] max-w-[110px] max-h-[110px] flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
                     <img src={`/images/icons/${node.icon}`} alt={node.label}
-                      className="w-full h-full object-contain opacity-90"
-                      style={{ filter: `drop-shadow(0 0 18px ${node.color}) drop-shadow(0 0 35px ${node.color}55)` }}
+                      className="w-full h-full object-contain opacity-95"
+                      // 光暈也隨著圖標放大而增強
+                      style={{ filter: `drop-shadow(0 0 25px ${node.color}) drop-shadow(0 0 45px ${node.color}66)` }}
                     />
                   </div>
-                  <span className="text-[11px] tracking-[0.3em] opacity-70" style={{ color: node.color }}>
-                    {node.label}
-                  </span>
+                  {/* 已經將下方原本顯示 node.label 的 <span> 標籤刪除 */}
                 </div>
               ))}
             </div>
