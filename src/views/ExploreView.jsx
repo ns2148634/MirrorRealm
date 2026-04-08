@@ -41,7 +41,6 @@ const MAP_STYLE = {
     },
   },
   layers: [{ id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-opacity': 1 } }],
-  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
 };
 
 
@@ -94,15 +93,20 @@ export default function ExploreView() {
         attributionControl: false,
       });
 
-      // filter 套在容器 div 上（比 canvas 更可靠）
-      if (mapContainerRef.current) {
-        mapContainerRef.current.style.filter =
-          'grayscale(1) invert(1) brightness(0.45) contrast(1.3)';
-      }
+      // filter 在 load 後再套：確保 canvas 已存在
+      map.on('load', () => {
+        if (mapContainerRef.current) {
+          mapContainerRef.current.style.filter =
+            'grayscale(1) invert(1) brightness(0.5) contrast(1.2)';
+        }
+      });
+
+      map.on('error', (e) => {
+        console.warn('[MapLibre] 地圖錯誤:', e.error?.message ?? e);
+      });
 
       mapRef.current = map;
     }).catch((err) => {
-      // WebGL2 不支援或其他載入錯誤 → 靜默略過，地圖不顯示但 app 正常運作
       console.warn('[ExploreView] MapLibre 載入失敗，略過地圖底圖:', err.message);
     });
 
@@ -358,7 +362,12 @@ export default function ExploreView() {
           fallbackScan(true); // 後端可能已扣 EP，前端同步更新
         }
       },
-      () => fallbackScan(false), // GPS 拒絕，後端未呼叫，不扣 EP
+      (err) => {
+        // GPS 拒絕或逾時
+        const isDenied = err.code === 1; // PERMISSION_DENIED
+        setMessage(isDenied ? '定位未授權，改用模擬探靈（可於瀏覽器授予位置權限）' : '定位逾時，改用模擬探靈');
+        fallbackScan(false);
+      },
       { timeout: 10000 }
     );
   };
