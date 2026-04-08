@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "concurrently \"node server/index.js\" \"vite\"",
     "build": "vite build",
     "start": "node server/index.js",
     "lint": "eslint .",
@@ -35,6 +36,7 @@
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^9.2.1",
     "esbuild": "^0.27.3",
     "eslint": "^9.19.0",
     "eslint-plugin-react": "^7.37.4",

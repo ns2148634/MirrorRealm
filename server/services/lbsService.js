@@ -19,7 +19,7 @@ const SCAN_COOLDOWN_SEC = 60;
 
 export async function performScan(playerId, lat, lng) {
   const playerResult = await db.query(
-    `SELECT ep, max_ep, hp, max_hp, sp, max_sp, aura,
+    `SELECT ep, max_ep, hp, max_hp, sp, max_sp, aura, realm_level,
             last_sync_time, last_scan_time
      FROM players WHERE id = $1`,
     [playerId]
@@ -84,10 +84,14 @@ export async function performScan(playerId, lat, lng) {
   // 危險等級對應突襲機率
   const ambushRate = { safe: 0, mid: 0.15, danger: 0.4, extreme: 0.7 };
 
-  // 生成節點
+  // 依境界決定可見節點相位
+  const isMortal = (player.realm_level ?? 1) <= 1;
+  const phaseFilter = isMortal ? `phase IN ('mortal', 'both')` : `phase IN ('immortal', 'both')`;
+
+  // 生成節點（依相位篩選）
   const nodeCount = Math.floor(Math.random() * 5) + 3;
   const templates = await db.query(
-    `SELECT * FROM lbs_node_templates ORDER BY RANDOM() LIMIT $1`,
+    `SELECT * FROM lbs_node_templates WHERE ${phaseFilter} ORDER BY RANDOM() LIMIT $1`,
     [nodeCount]
   );
 
@@ -156,6 +160,8 @@ export async function performExecution(playerId, nodeType, nodeName, stance = 'b
     let costHp        = 0;
     let rewardMessage = '';
     let itemName      = null;
+    let spiritRootElement = null;
+    let spiritRootGain    = 0;
 
     if (nodeType === '拾荒' || nodeType === '勞動') {
         costSp = 10;
@@ -168,9 +174,62 @@ export async function performExecution(playerId, nodeType, nodeName, stance = 'b
             itemName      = '下品靈石';
             rewardMessage = `機緣巧合！你在【${nodeName}】深處感受到微弱靈氣，消耗 10 點體力，獲得了 [${itemName}]！`;
         }
-    } else if (nodeType === '戰鬥') {
-        // 戰鬥節點委派給 ATB 時間軸推演引擎，傳入玩家選擇的姿態
+
+    } else if (nodeType === '勞作') {
+        // 凡人期勞作：消耗體力，積累土系靈根
+        costSp = 8;
+        if (afterDelta.sp < costSp) throw new Error('體力不足，無法勞作');
+        spiritRootElement = '土';
+        spiritRootGain    = Math.floor(Math.random() * 3) + 2; // 2–4
+        if (Math.random() < 0.6) {
+            itemName      = '破銅爛鐵';
+            rewardMessage = `你在【${nodeName}】埋頭勞作，汗水浸透衣衫，收獲了些許廢料。靈根悄然積聚。`;
+        } else {
+            rewardMessage = `你在【${nodeName}】辛苦一番，雖無所獲，卻感到筋骨愈發紮實。`;
+        }
+
+    } else if (nodeType === '見聞') {
+        // 凡人期見聞：無消耗，積累對應靈根
+        const ELEMENT_BY_PLACE = { '廟宇': '金', '公園': '木', '河邊': '水', '市場': '土', 'default': '木' };
+        const matchedElement = Object.keys(ELEMENT_BY_PLACE).find(k => nodeName.includes(k)) ?? 'default';
+        spiritRootElement = ELEMENT_BY_PLACE[matchedElement];
+        spiritRootGain    = Math.floor(Math.random() * 2) + 1; // 1–2
+        rewardMessage = `你在【${nodeName}】駐足觀察，心有所感。某種無形的力量在體內緩緩流動。`;
+
+    } else if (nodeType === '衝突') {
+        // 凡人期衝突：與地痞流氓等交涉或對抗，積累金系靈根
+        costSp = 5;
+        if (afterDelta.sp < costSp) throw new Error('體力不足，無力應對衝突');
+        spiritRootElement = '金';
+        spiritRootGain    = Math.floor(Math.random() * 4) + 3; // 3–6（衝突磨礪更快）
+        const outcomes = [
+            `你在【${nodeName}】遭遇地痞挑釁，以三言兩語化解，對方悻悻離去。`,
+            `你在【${nodeName}】被人堵路，鬥智鬥勇後全身而退，膽氣愈發充盈。`,
+            `你在【${nodeName}】見義勇為，替人解圍，對方感激離去。`,
+        ];
+        rewardMessage = outcomes[Math.floor(Math.random() * outcomes.length)];
+
+    } else if (nodeType === '妖獸') {
+        // 修仙期妖獸：委派 ATB 戰鬥引擎
         return await runCombat(playerId, stance);
+
+    } else if (nodeType === '機緣') {
+        // 修仙期機緣：靈氣或物品獎勵
+        const chanceRoll = Math.random();
+        if (chanceRoll < 0.4) {
+            itemName      = '下品靈石';
+            rewardMessage = `天機流轉，你在【${nodeName}】感應到一絲靈機，得了一枚靈石。`;
+        } else if (chanceRoll < 0.7) {
+            itemName      = '聚氣丹';
+            rewardMessage = `緣法所至，你在【${nodeName}】拾得一枚聚氣丹，靈氣充盈。`;
+        } else {
+            rewardMessage = `你在【${nodeName}】感悟天地，雖無物質所得，道心卻更為堅定。`;
+        }
+
+    } else if (nodeType === '戰鬥') {
+        // 相容舊節點類型
+        return await runCombat(playerId, stance);
+
     } else {
         rewardMessage = `你在【${nodeName}】靜坐片刻，心境似乎有所提升。`;
     }
@@ -195,14 +254,25 @@ export async function performExecution(playerId, nodeType, nodeName, stance = 'b
         );
     }
 
+    // 凡人期靈根積累（僅在有元素時寫入）
+    const ELEMENT_COL = { '木': 'sr_wood', '火': 'sr_fire', '水': 'sr_water', '金': 'sr_metal', '土': 'sr_earth' };
+    if (spiritRootElement && spiritRootGain > 0 && ELEMENT_COL[spiritRootElement]) {
+        const col = ELEMENT_COL[spiritRootElement];
+        await db.query(
+            `UPDATE players SET ${col} = COALESCE(${col}, 0) + $1 WHERE id = $2`,
+            [spiritRootGain, playerId]
+        );
+    }
+
     return {
-        cost_hp:      costHp,
-        cost_sp:      costSp,
-        hp:           newHp,
-        sp:           newSp,
-        ep:           afterDelta.ep,
-        message:      rewardMessage,
-        item_dropped: itemName,
-        battleLog:    null,
+        cost_hp:           costHp,
+        cost_sp:           costSp,
+        hp:                newHp,
+        sp:                newSp,
+        ep:                afterDelta.ep,
+        message:           rewardMessage,
+        item_dropped:      itemName,
+        battleLog:         null,
+        spirit_root_gain:  spiritRootElement ? { element: spiritRootElement, value: spiritRootGain } : null,
     };
 }

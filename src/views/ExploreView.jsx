@@ -10,10 +10,19 @@ const LOG_LINE_COLOR = {
   'info':   '#9CA3AF',
 };
 
-const POI_MAPPING = {
-  'convenience':    { name: '修真坊市', color: '#FFD700', glow: 'rgba(255,215,0,0.6)',   type: 'shop'  },
-  'place_of_worship': { name: '前輩遺物', color: '#9B5CFF', glow: 'rgba(155,92,255,0.6)', type: 'ruin'  },
-  'default':        { name: '低階妖獸', color: '#FF3B30', glow: 'rgba(255,59,48,0.6)',   type: 'beast' },
+// 節點類型 → 顯示配色（凡人期 + 修仙期統一）
+const NODE_TYPE_MAPPING = {
+  // ── 凡人期 ────────────────────────────────────────────────────────
+  '勞作': { color: '#A0855B', glow: 'rgba(160,133,91,0.6)',   type: 'labor'    },
+  '見聞': { color: '#7EC8E3', glow: 'rgba(126,200,227,0.6)',  type: 'observe'  },
+  '衝突': { color: '#FF9500', glow: 'rgba(255,149,0,0.6)',    type: 'conflict' },
+  // ── 修仙期 ────────────────────────────────────────────────────────
+  '妖獸': { color: '#FF3B30', glow: 'rgba(255,59,48,0.6)',    type: 'beast'    },
+  '機緣': { color: '#9B5CFF', glow: 'rgba(155,92,255,0.6)',   type: 'chance'   },
+  // ── 通用 ──────────────────────────────────────────────────────────
+  '拾荒': { color: '#FFD700', glow: 'rgba(255,215,0,0.6)',    type: 'scavenge' },
+  '勞動': { color: '#FFD700', glow: 'rgba(255,215,0,0.6)',    type: 'labor2'   },
+  '戰鬥': { color: '#FF3B30', glow: 'rgba(255,59,48,0.6)',    type: 'combat'   },
 };
 
 const TERRAIN_MAPPING = {
@@ -330,11 +339,10 @@ export default function ExploreView() {
           );
 
           // 映射後端節點 → 前端事件（含虛擬 GPS 定位）
+          const FALLBACK_STYLE = { color: '#9CA3AF', glow: 'rgba(156,163,175,0.5)', type: 'unknown' };
           const mapped = backendNodes.map((node) => {
-            let mapping = POI_MAPPING['default'];
-            if (node.type === '拾荒')                          mapping = POI_MAPPING['convenience'];
-            else if (node.type === '機緣' || node.type === '勞動') mapping = POI_MAPPING['place_of_worship'];
-            if (node.is_ambush) mapping = { ...mapping, color: '#FF3B30', glow: 'rgba(255,59,48,0.8)' };
+            let style = NODE_TYPE_MAPPING[node.type] ?? FALLBACK_STYLE;
+            if (node.is_ambush) style = { ...style, color: '#FF3B30', glow: 'rgba(255,59,48,0.8)' };
 
             return {
               id:          node.instance_id,
@@ -345,7 +353,7 @@ export default function ExploreView() {
               isAmbush:    node.is_ambush,
               node_lat:    node.node_lat,
               node_lng:    node.node_lng,
-              ...mapping,
+              ...style,
             };
           });
 
@@ -391,7 +399,7 @@ export default function ExploreView() {
             description: '似乎散發著微弱的靈氣',
             cost:        { sp: 10, hp: 0 },
             isAmbush:    false,
-            ...POI_MAPPING['convenience'],
+            ...NODE_TYPE_MAPPING['拾荒'],
             top:  `${topPct.toFixed(1)}%`,
             left: `${leftPct.toFixed(1)}%`,
           };

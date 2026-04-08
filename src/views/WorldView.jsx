@@ -251,26 +251,26 @@ export default function WorldView() {
           {/* 天機：上中下垂直置中排列 */}
           {activeTab === 'settings' ? (
             // 稍微加大圖標之間的間距 (gap-[8cqw] -> gap-[10cqw])
-            <div className="flex-1 flex flex-col items-center justify-center gap-[10cqw] px-[8cqw]">
-              {subNodes.map((node) => (
-                <div
-                  key={node.id}
-                  onClick={() => viewState === 'sub' && handleSubNodeClick(node)}
-                  className="flex flex-col items-center cursor-pointer group active:scale-95 transition-all duration-300 animate-float"
-                  style={{ animationDelay: node.delay }}
-                >
-                  {/* 放大圖標尺寸：將原本的 18cqw/75px 加大為 28cqw/110px */}
-                  <div className="w-[28cqw] h-[28cqw] max-w-[110px] max-h-[110px] flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
-                    <img src={`/images/icons/${node.icon}`} alt={node.label}
-                      className="w-full h-full object-contain opacity-95"
-                      // 光暈也隨著圖標放大而增強
-                      style={{ filter: `drop-shadow(0 0 25px ${node.color}) drop-shadow(0 0 45px ${node.color}66)` }}
-                    />
-                  </div>
-                  {/* 已經將下方原本顯示 node.label 的 <span> 標籤刪除 */}
-                </div>
-              ))}
-            </div>
+           <div className="flex-1 flex flex-col items-center justify-center gap-[10cqw] px-[8cqw]">
+  {subNodes.map((node) => (
+    <div
+      key={node.id}
+      onClick={() => viewState === 'sub' && handleSubNodeClick(node)}
+      className="flex flex-col items-center cursor-pointer group active:scale-95 transition-all duration-300 animate-float"
+      style={{ animationDelay: node.delay }}
+    >
+      {/* 🚀 放大圖標的基礎尺寸：將 28cqw/110px 加大為 40cqw/160px */}
+      {/* 🚀 修正 hover 放大：將無效的 scale-200 改為有效的 scale-[1.5] (放大1.5倍) 或 scale-[2] (放大2倍) */}
+      <div className="w-[40cqw] h-[40cqw] max-w-[160px] max-h-[160px] flex items-center justify-center transition-transform duration-500 group-hover:scale-[1.5]">
+        <img src={`/images/icons/${node.icon}`} alt={node.label}
+          className="w-full h-full object-contain opacity-95"
+          // 光暈隨著圖標變大，可以稍微再加強一點半徑
+          style={{ filter: `drop-shadow(0 0 30px ${node.color}) drop-shadow(0 0 60px ${node.color}66)` }}
+        />
+      </div>
+    </div>
+  ))}
+</div>
           ) : (
             /* 仙坊 / 懸賞：星圖散點排列 */
             <div className="relative flex-1 w-full">
