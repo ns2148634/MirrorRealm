@@ -187,10 +187,10 @@ export async function performExecution(playerId, nodeType, nodeName, stance = 'b
     // 寫入背包（物品名稱查 id，ON CONFLICT +1）
     if (itemName) {
         await db.query(
-            `INSERT INTO player_items (player_id, item_id, quantity)
+            `INSERT INTO player_inventory (player_id, item_id, quantity)
              SELECT $1, id, 1 FROM items WHERE name = $2
              ON CONFLICT (player_id, item_id)
-             DO UPDATE SET quantity = player_items.quantity + 1`,
+             DO UPDATE SET quantity = player_inventory.quantity + 1`,
             [playerId, itemName]
         );
     }

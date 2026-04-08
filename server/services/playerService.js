@@ -12,8 +12,9 @@ export async function getBackpack(playerId) {
              i.description,
              i.effect_type,
              i.effect_value,
-             pi.quantity
-         FROM player_items pi
+             pi.quantity,
+             pi.is_equipped
+         FROM player_inventory pi
          JOIN items i ON pi.item_id = i.id
          WHERE pi.player_id = $1
          ORDER BY i.item_type, i.name`,
@@ -107,7 +108,7 @@ export async function useItem(playerId, itemId) {
     const [invResult, playerResult] = await Promise.all([
         db.query(
             `SELECT pi.quantity, i.name, i.effect_type, i.effect_value
-             FROM player_items pi
+             FROM player_inventory pi
              JOIN items i ON pi.item_id = i.id
              WHERE pi.player_id = $1 AND pi.item_id = $2`,
             [playerId, itemId]
@@ -164,12 +165,12 @@ export async function useItem(playerId, itemId) {
     // 4. 消耗物品
     if (inv.quantity === 1) {
         await db.query(
-            `DELETE FROM player_items WHERE player_id = $1 AND item_id = $2`,
+            `DELETE FROM player_inventory WHERE player_id = $1 AND item_id = $2`,
             [playerId, itemId]
         );
     } else {
         await db.query(
-            `UPDATE player_items SET quantity = quantity - 1
+            `UPDATE player_inventory SET quantity = quantity - 1
              WHERE player_id = $1 AND item_id = $2`,
             [playerId, itemId]
         );
@@ -255,13 +256,13 @@ export async function breakthrough(playerId) {
     }
 }
 
-// ── 取得裝備清單 ──────────────────────────────────────────────────
+// ── 取得裝備清單（從 player_inventory 篩選已裝備）─────────────────
 export async function getEquipment(playerId) {
     const result = await db.query(
-        `SELECT pe.slot, pe.item_id, i.name, i.rarity, i.stat_bonus
-         FROM player_equipment pe
-         JOIN items i ON pe.item_id = i.id
-         WHERE pe.player_id = $1`,
+        `SELECT pi.item_id, i.name, i.rarity, i.equip_slot AS slot, i.stat_bonus
+         FROM player_inventory pi
+         JOIN items i ON pi.item_id = i.id
+         WHERE pi.player_id = $1 AND pi.is_equipped = true`,
         [playerId]
     );
     return result.rows;
@@ -271,7 +272,7 @@ export async function getEquipment(playerId) {
 export async function equipItem(playerId, itemId) {
     const invResult = await db.query(
         `SELECT pi.quantity, i.name, i.equip_slot, i.stat_bonus
-         FROM player_items pi
+         FROM player_inventory pi
          JOIN items i ON pi.item_id = i.id
          WHERE pi.player_id = $1 AND pi.item_id = $2`,
         [playerId, itemId]
@@ -280,11 +281,12 @@ export async function equipItem(playerId, itemId) {
     const item = invResult.rows[0];
     if (!item.equip_slot) throw new Error('此道具無法裝備');
 
+    // 找同槽位已裝備的舊裝備
     const slotResult = await db.query(
-        `SELECT i.stat_bonus
-         FROM player_equipment pe
-         JOIN items i ON pe.item_id = i.id
-         WHERE pe.player_id = $1 AND pe.slot = $2`,
+        `SELECT pi.item_id, i.stat_bonus
+         FROM player_inventory pi
+         JOIN items i ON pi.item_id = i.id
+         WHERE pi.player_id = $1 AND pi.is_equipped = true AND i.equip_slot = $2`,
         [playerId, item.equip_slot]
     );
     const oldBonus = slotResult.rows[0]?.stat_bonus ?? {};
@@ -297,11 +299,20 @@ export async function equipItem(playerId, itemId) {
     try {
         await client.query('BEGIN');
 
+        // 卸下同槽舊裝備
+        if (slotResult.rows.length > 0) {
+            await client.query(
+                `UPDATE player_inventory SET is_equipped = false
+                 WHERE player_id = $1 AND item_id = $2`,
+                [playerId, slotResult.rows[0].item_id]
+            );
+        }
+
+        // 裝備新道具
         await client.query(
-            `INSERT INTO player_equipment (player_id, slot, item_id)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (player_id, slot) DO UPDATE SET item_id = EXCLUDED.item_id`,
-            [playerId, item.equip_slot, itemId]
+            `UPDATE player_inventory SET is_equipped = true
+             WHERE player_id = $1 AND item_id = $2`,
+            [playerId, itemId]
         );
 
         const updResult = await client.query(
@@ -334,10 +345,10 @@ export async function equipItem(playerId, itemId) {
 // ── 卸除裝備 ─────────────────────────────────────────────────────
 export async function unequipItem(playerId, slot) {
     const slotResult = await db.query(
-        `SELECT pe.item_id, i.name, i.stat_bonus
-         FROM player_equipment pe
-         JOIN items i ON pe.item_id = i.id
-         WHERE pe.player_id = $1 AND pe.slot = $2`,
+        `SELECT pi.item_id, i.name, i.stat_bonus
+         FROM player_inventory pi
+         JOIN items i ON pi.item_id = i.id
+         WHERE pi.player_id = $1 AND pi.is_equipped = true AND i.equip_slot = $2`,
         [playerId, slot]
     );
     if (slotResult.rows.length === 0) throw new Error('此槽位尚未裝備任何道具');
@@ -349,8 +360,9 @@ export async function unequipItem(playerId, slot) {
         await client.query('BEGIN');
 
         await client.query(
-            `DELETE FROM player_equipment WHERE player_id = $1 AND slot = $2`,
-            [playerId, slot]
+            `UPDATE player_inventory SET is_equipped = false
+             WHERE player_id = $1 AND item_id = $2`,
+            [playerId, equipped.item_id]
         );
 
         const updResult = await client.query(
