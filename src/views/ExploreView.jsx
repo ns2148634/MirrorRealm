@@ -286,7 +286,7 @@ export default function ExploreView() {
     setEvents([]);
     setMessage('神識牽引天地，搜尋周遭...');
 
-    if (!navigator.geolocation) { fallbackScan(); return; }
+    if (!navigator.geolocation) { fallbackScan(false); return; }
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -355,32 +355,42 @@ export default function ExploreView() {
           centerMapOnPlayer(lat, lng);
 
         } catch {
-          fallbackScan();
+          fallbackScan(true); // 後端可能已扣 EP，前端同步更新
         }
       },
-      () => fallbackScan(),
+      () => fallbackScan(false), // GPS 拒絕，後端未呼叫，不扣 EP
       { timeout: 10000 }
     );
   };
 
-  const fallbackScan = () => {
+  const fallbackScan = (shouldDeductEp = false) => {
     setTimeout(() => {
       setZoneTier('safe');
       setEvents(
-        Array.from({ length: Math.floor(Math.random() * 3) + 2 }).map((_, i) => ({
-          id:        `mock-${i}`,
-          nodeType:  '拾荒',
-          name:      '未知遺落物',
-          description: '似乎散發著微弱的靈氣',
-          cost:      { sp: 10, hp: 0 },
-          isAmbush:  false,
-          ...POI_MAPPING['convenience'],
-          top:  `${Math.floor(Math.random() * 70 + 15)}%`,
-          left: `${Math.floor(Math.random() * 70 + 15)}%`,
-        }))
+        Array.from({ length: Math.floor(Math.random() * 3) + 2 }).map((_, i) => {
+          const angle = (i * (360 / 5) + Math.random() * 40 - 20 + 360) % 360;
+          const dist  = 60 + Math.random() * 200;
+          const MAX_DIST = 300, MAX_RADIUS = 38;
+          const r   = Math.min(dist / MAX_DIST, 1) * MAX_RADIUS;
+          const rad = angle * Math.PI / 180;
+          const leftPct = Math.min(88, Math.max(12, 50 + Math.sin(rad) * r));
+          const topPct  = Math.min(82, Math.max(12, 50 - Math.cos(rad) * r));
+          return {
+            id:          `mock-${i}`,
+            nodeType:    '拾荒',
+            name:        '未知遺落物',
+            description: '似乎散發著微弱的靈氣',
+            cost:        { sp: 10, hp: 0 },
+            isAmbush:    false,
+            ...POI_MAPPING['convenience'],
+            top:  `${topPct.toFixed(1)}%`,
+            left: `${leftPct.toFixed(1)}%`,
+          };
+        })
       );
       setIsScanning(false);
       setMessage('探尋完畢');
+      if (shouldDeductEp && reduceEp) reduceEp(10);
     }, 1500);
   };
 
@@ -446,10 +456,10 @@ export default function ExploreView() {
           <div
             key={ev.id}
             className="absolute flex flex-col items-center justify-center cursor-pointer z-20"
-            style={{ top: ev.top, left: ev.left }}
+            style={{ top: ev.top, left: ev.left, transform: 'translate(-50%, -50%)' }}
             onClick={(e) => { e.stopPropagation(); openNodeModal(ev); }}
           >
-            <div className="relative flex items-center justify-center translate-y-[-50%]">
+            <div className="relative flex items-center justify-center">
               <div
                 className={`absolute ${pingSize} rounded-full opacity-40 ${pingAnim}`}
                 style={{ backgroundColor: ev.color }}
