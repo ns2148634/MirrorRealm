@@ -378,8 +378,10 @@ export default function ExploreView() {
           // 地圖置中（非同步，不阻塞節點顯示）
           centerMapOnPlayer(lat, lng);
 
-        } catch {
-          fallbackScan(true); // 後端可能已扣 EP，前端同步更新
+        } catch (err) {
+          console.error('[探靈] 後端錯誤:', err);
+          setMessage(`探靈失敗：${err?.message ?? '天地法則紊亂'}`);
+          setIsScanning(false);
         }
       },
       (err) => {

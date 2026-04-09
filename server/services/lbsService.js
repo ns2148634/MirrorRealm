@@ -100,45 +100,23 @@ export async function performScan(playerId, lat, lng) {
     }
   }
 
-  // ── 麵包屑：感應到掃描範圍外的世界事件，給出模糊方向提示 ──────────
-  // InfoAccuracy = 0.5 × (1 + 神識/100)，上限 0.95
-  const infoAccuracy = Math.min(0.95, 0.5 * (1 + (player.mind ?? 0) / 100));
-  const maxDirectionError = 90; // 最大偏移角度（低神識）
-  const minDirectionError = 15; // 最小偏移角度（高神識）
-  const directionErrorDeg = (1 - infoAccuracy) * (maxDirectionError - minDirectionError) + minDirectionError;
-
-  // 事件類型係數（影響麵包屑生成機率）
-  const BREADCRUMB_TYPE_COEFF = { '妖獸': 1.2, '靈氣': 1.0, '幻象': 0.8 };
-
-  // dangerLevel 由最近事件的距離衰減決定（無事件則為 0）
-  const dangerLevel = nearestEvent
-    ? (nearestEvent.danger_radius > 0 ? Math.max(0, 1 - nearestDistance / nearestEvent.danger_radius) : 0)
-    : 0;
+  // ── 麵包屑：掃描範圍外的世界事件，30% 機率出現方向提示 ──────────
+  const BREADCRUMB_CHANCE = 0.30;
 
   const breadcrumbs = [];
   for (const event of eventResult.rows) {
     const dist = getDistance(lat, lng, event.lat, event.lng);
-    // 只對掃描範圍外的事件產生麵包屑（範圍內已是 nearestEvent）
+    // 只對掃描範圍外的事件產生麵包屑
     if (dist < event.danger_radius) continue;
+    if (Math.random() > BREADCRUMB_CHANCE) continue;
 
-    const typeCoeff = BREADCRUMB_TYPE_COEFF[event.event_type] ?? 1.0;
-    const chance = Math.min(0.8, dangerLevel * typeCoeff + 0.1); // 基礎 10% + 危險加成
-    if (Math.random() > chance) continue;
-
-    // 真實方位角
-    const trueAngle = getBearing(lat, lng, event.lat, event.lng);
-    // 加入誤差（±directionErrorDeg 範圍內隨機偏移）
-    const error = (Math.random() * 2 - 1) * directionErrorDeg;
-    const fuzzyAngle = (trueAngle + error + 360) % 360;
-
-    // 距離描述（模糊化）
+    const angle = getBearing(lat, lng, event.lat, event.lng);
     const distDesc = dist < 500 ? '近處' : dist < 2000 ? '不遠' : dist < 5000 ? '遠方' : '極遠處';
 
     breadcrumbs.push({
-      angle:     Math.round(fuzzyAngle),
+      angle:     Math.round(angle),
       dist_desc: distDesc,
       type:      event.event_type ?? '異象',
-      accuracy:  Math.round(infoAccuracy * 100), // 百分比，給前端顯示用
     });
   }
 
@@ -159,21 +137,9 @@ export async function performScan(playerId, lat, lng) {
     else if (zoneTier === 'danger') zoneTier = 'extreme';
   }
 
-  // 危險等級對應基礎突襲機率
-  const baseAmbushRate = { safe: 0, mid: 0.15, danger: 0.4, extreme: 0.7 };
-
-  // 玩家狀態修正（設計公式）
-  // (1 - 神識/200)：神識高 → 降低被偷襲
-  // (1 + (1 - 氣血%))：血越少 → 越容易被盯上
-  // 疲勞：EP 低於 30% 視為疲勞
-  const hpPct      = afterDelta.hp / (player.max_hp || 1);
-  const isExhausted = afterDelta.ep / (player.max_ep || 1) < 0.3 ? 0.3 : 0;
-  const playerFactor = (1 - (player.mind ?? 0) / 200)
-                     * (1 + (1 - hpPct))
-                     * (1 + isExhausted);
-
-  // 最終突襲機率 = 基礎 × 玩家修正，上限 0.8
-  const finalAmbushRate = Math.min(0.8, (baseAmbushRate[zoneTier] ?? 0) * playerFactor);
+  // 突襲機率：純粹由危險等級決定，觸發即強制戰鬥
+  const AMBUSH_RATE = { safe: 0, mid: 0.15, danger: 0.40, extreme: 0.70 };
+  const finalAmbushRate = AMBUSH_RATE[zoneTier] ?? 0;
 
   // 依境界決定可見節點相位
   const isMortal = (player.realm_level ?? 1) <= 1;
