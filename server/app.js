@@ -11,11 +11,12 @@ import express from 'express';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import lbsRoutes    from './routes/lbsRoutes.js';
-import playerRoutes from './routes/playerRoutes.js';
-import authRoutes   from './routes/authRoutes.js';
-import configRoutes from './routes/configRoutes.js';
-import combatRoutes from './routes/combatRoutes.js';
+import lbsRoutes          from './routes/lbsRoutes.js';
+import playerRoutes       from './routes/playerRoutes.js';
+import authRoutes         from './routes/authRoutes.js';
+import configRoutes       from './routes/configRoutes.js';
+import combatRoutes       from './routes/combatRoutes.js';
+import dailyGenerateRoutes from './routes/dailyGenerate.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = dirname(__filename);
@@ -31,6 +32,7 @@ app.use('/api/lbs',    lbsRoutes);
 app.use('/api/player', playerRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/combat', combatRoutes);
+app.use('/api/daily',  dailyGenerateRoutes);
 
 // ── 靜態資源（Vite 打包產物）─────────────────────────────────────
 // 在 Vercel 環境：靜態檔案由 Vercel CDN 直接服務，這段 code 不會被呼叫。

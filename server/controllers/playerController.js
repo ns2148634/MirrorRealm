@@ -1,5 +1,6 @@
 // server/controllers/playerController.js
 import { getBackpack, getPlayerStatus, meditate, useItem, breakthrough, getEquipment, equipItem, unequipItem, getFriends, getSect } from '../services/playerService.js';
+import { craftItem, getProficiency } from '../services/craftingService.js';
 
 export async function getPlayerStatusHandler(req, res) {
     try {
@@ -130,6 +131,29 @@ export async function getPlayerSect(req, res) {
         return res.status(200).json({ status: 'success', sect });
     } catch (error) {
         console.error('宗門查詢失敗:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
+    }
+}
+
+export async function craftPlayerItem(req, res) {
+    try {
+        const { playerId, mainItemId, sub1ItemId, sub2ItemId } = req.body;
+        if (!playerId || !mainItemId) return res.status(400).json({ status: 'error', message: '缺少煉製素材' });
+        const result = await craftItem(playerId, mainItemId, sub1ItemId ?? null, sub2ItemId ?? null);
+        return res.status(200).json({ status: 'success', data: result });
+    } catch (error) {
+        console.error('煉製失敗:', error);
+        return res.status(400).json({ status: 'error', message: error.message });
+    }
+}
+
+export async function getPlayerProficiency(req, res) {
+    try {
+        const { playerId } = req.params;
+        if (!playerId) return res.status(400).json({ status: 'error', message: '缺少玩家 ID' });
+        const data = await getProficiency(playerId);
+        return res.status(200).json({ status: 'success', data });
+    } catch (error) {
         return res.status(500).json({ status: 'error', message: error.message });
     }
 }

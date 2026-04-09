@@ -23,12 +23,10 @@ const NODE_TYPE_MAPPING = {
   '拾荒': { color: '#FFD700', glow: 'rgba(255,215,0,0.6)',    type: 'scavenge' },
   '勞動': { color: '#FFD700', glow: 'rgba(255,215,0,0.6)',    type: 'labor2'   },
   '戰鬥': { color: '#FF3B30', glow: 'rgba(255,59,48,0.6)',    type: 'combat'   },
+  '靈泉': { color: '#00E5FF', glow: 'rgba(0,229,255,0.7)',    type: 'spring'   },
+  '道友': { color: '#C084FC', glow: 'rgba(192,132,252,0.6)',  type: 'player'   },
 };
 
-const TERRAIN_MAPPING = {
-  'water':  { type: '水脈', color: '#00E5FF', size: 'w-[40cqw] h-[40cqw]', animation: 'animate-[pulse_4s_infinite]'  },
-  'forest': { type: '靈林', color: '#32D74B', size: 'w-[50cqw] h-[50cqw]', animation: 'animate-[pulse_6s_infinite]'  },
-};
 
 // 危險等級對應全畫面氣氛底色
 const ZONE_ATMOSPHERE = {
@@ -64,9 +62,9 @@ export default function ExploreView() {
   const [isTuning,   setIsTuning]   = useState(false);
   const [isPressing, setIsPressing] = useState(false);
 
-  const [events,   setEvents]   = useState([]);
-  const [terrains, setTerrains] = useState([]);
-  const [message,  setMessage]  = useState('凝神聚氣，外放神識');
+  const [events,      setEvents]      = useState([]);
+  const [breadcrumbs, setBreadcrumbs] = useState([]);
+  const [message,     setMessage]     = useState('凝神聚氣，外放神識');
   const [zoneTier, setZoneTier] = useState(null); // safe | mid | danger | extreme
 
   const [activeModal, setActiveModal] = useState(null);
@@ -141,9 +139,9 @@ export default function ExploreView() {
   };
 
   // ── 計算節點螢幕位置（方位角+距離 → top/left %）────────────────────
-  // 最大顯示距離 300m 對應最大半徑 38%（以 50% 為中心），避免貼邊
-  const computeNodePositions = (nodes, playerLat, playerLng) => {
-    const MAX_DIST   = 300;
+  // 最大顯示距離動態來自後端 scan_range_m，預設 300m
+  const computeNodePositions = (nodes, playerLat, playerLng, scanRangeM = 300) => {
+    const MAX_DIST   = scanRangeM;
     const MAX_RADIUS = 38;
     const hasGPS = playerLat != null && playerLng != null;
 
@@ -219,7 +217,11 @@ export default function ExploreView() {
       setMessage('定神調息中，無法進行互動');
       return;
     }
-    if (clickedNode.isAmbush) {
+    // 戰鬥類節點（突襲 or 妖獸/戰鬥類型）直接進全螢幕戰鬥
+    const isCombatType = clickedNode.isAmbush
+      || clickedNode.nodeType === '妖獸'
+      || clickedNode.nodeType === '戰鬥';
+    if (isCombatType) {
       triggerCombat({
         source:   'explore',
         nodeName: clickedNode.name,
@@ -230,31 +232,28 @@ export default function ExploreView() {
     setActiveModal({ step: 'info', node: clickedNode });
   };
 
-  const handleCombatNode = () => {
-    const node = activeModal?.node;
-    if (!node) return;
-    const nodeId = node.id;
-    triggerCombat({
-      source:   'explore',
-      nodeName: node.name,
-      onComplete: () => setEvents(prev => prev.filter(e => e.id !== nodeId)),
-    });
-    setActiveModal(null);
-  };
-
   const confirmExecuteNode = async () => {
     if (!player?.id || !activeModal?.node) return;
     try {
       setActiveModal(prev => ({ ...prev, step: 'loading' }));
+
+      const node = activeModal.node;
+      const extraOptions = {};
+      if (node.nodeType === '靈泉') extraOptions.aura_amount = node.aura_amount;
+      if (node.nodeType === '道友') {
+        extraOptions.target_player_id = node.target_player_id;
+        extraOptions.pvp_type         = activeModal.pvpType ?? 'spar';
+      }
 
       const res = await fetch('/api/lbs/execute', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           playerId: player.id,
-          nodeType: activeModal.node.nodeType || '拾荒',
-          nodeName: activeModal.node.name,
+          nodeType: node.nodeType || '拾荒',
+          nodeName: node.name,
           stance:   activeModal.stance ?? 'balanced',
+          ...extraOptions,
         }),
       });
 
@@ -267,12 +266,15 @@ export default function ExploreView() {
 
       setActiveModal(prev => ({
         ...prev,
-        step:          'result',
-        resultMessage: result.data.message,
-        battleLog:     result.data.battleLog    ?? null,
-        outcome:       result.data.outcome      ?? null,
-        itemDropped:   result.data.item_dropped ?? null,
-        expGained:     result.data.exp_gained   ?? 0,
+        step:           'result',
+        resultMessage:  result.data.message,
+        battleLog:      result.data.battleLog      ?? null,
+        outcome:        result.data.outcome        ?? null,
+        itemDropped:    result.data.item_dropped   ?? null,
+        expGained:      result.data.exp_gained     ?? 0,
+        prestigeDelta:  result.data.prestige_delta ?? 0,
+        shaqiDelta:     result.data.sha_qi_delta   ?? 0,
+        itemLost:       result.data.item_lost      ?? null,
       }));
 
       setEvents(prevEvents => prevEvents.filter(e => e.id !== activeModal.node.id));
@@ -297,6 +299,7 @@ export default function ExploreView() {
 
     setIsScanning(true);
     setEvents([]);
+    setBreadcrumbs([]);
     setMessage('神識牽引天地，搜尋周遭...');
 
     if (!navigator.geolocation) { fallbackScan(false); return; }
@@ -321,7 +324,7 @@ export default function ExploreView() {
           }
 
           const result = await res.json();
-          const { nodes: backendNodes, zone_tier, nearest_event } = result.data;
+          const { nodes: backendNodes, zone_tier, nearest_event, repeat_message } = result.data;
 
           // 更新危險等級
           setZoneTier(zone_tier ?? 'safe');
@@ -333,9 +336,11 @@ export default function ExploreView() {
             extreme: '此地凶險至極，慎行！',
           };
           setMessage(
-            nearest_event
-              ? `${zoneMessage[zone_tier]}——${nearest_event.name}距此 ${nearest_event.distance} 公尺`
-              : `${zoneMessage[zone_tier]}，發現 ${backendNodes.length} 處靈力波動`
+            repeat_message
+              ? repeat_message
+              : nearest_event
+                ? `${zoneMessage[zone_tier]}——${nearest_event.name}距此 ${nearest_event.distance} 公尺`
+                : `${zoneMessage[zone_tier]}，發現 ${backendNodes.length} 處靈力波動`
           );
 
           // 映射後端節點 → 前端事件（含虛擬 GPS 定位）
@@ -345,22 +350,29 @@ export default function ExploreView() {
             if (node.is_ambush) style = { ...style, color: '#FF3B30', glow: 'rgba(255,59,48,0.8)' };
 
             return {
-              id:          node.instance_id,
-              name:        node.name,
-              description: node.description,
-              cost:        { sp: node.cost_sp, hp: node.cost_hp },
-              nodeType:    node.type,
-              isAmbush:    node.is_ambush,
-              node_lat:    node.node_lat,
-              node_lng:    node.node_lng,
+              id:                   node.instance_id,
+              name:                 node.name,
+              description:          node.description,
+              cost:                 { sp: node.cost_sp, hp: node.cost_hp },
+              nodeType:             node.type,
+              isAmbush:             node.is_ambush,
+              node_lat:             node.node_lat,
+              node_lng:             node.node_lng,
+              // 靈泉
+              aura_amount:          node.aura_amount ?? null,
+              // 道友
+              target_player_id:     node.target_player_id ?? null,
+              target_prestige:      node.target_prestige ?? 0,
+              target_prestige_level: node.target_prestige_level ?? 0,
+              target_realm_level:   node.target_realm_level ?? 1,
               ...style,
             };
           });
 
           // 純數學定位，不依賴地圖載入狀態，直接計算
-          const withPos = computeNodePositions(mapped, lat, lng);
+          const withPos = computeNodePositions(mapped, lat, lng, result.data.scan_range_m ?? 300);
           setEvents(withPos);
-          setTerrains([{ id: 't1', ...TERRAIN_MAPPING['water'], top: '30%', left: '70%' }]);
+          setBreadcrumbs(result.data.breadcrumbs ?? []);
           setIsScanning(false);
           if (reduceEp) reduceEp(10);
           // 地圖置中（非同步，不阻塞節點顯示）
@@ -448,16 +460,29 @@ export default function ExploreView() {
         style={{ backgroundColor: atmosphereColor }}
       />
 
-      {/* 2. 底層風水地形光暈 */}
-      <div className="absolute inset-0 pointer-events-none z-[2]">
-        {terrains.map((terrain) => (
+      {/* 2. 麵包屑方向指示（沿邊緣的箭頭） */}
+      {breadcrumbs.map((bc, i) => {
+        // 將角度轉換成邊緣座標（讓箭頭貼著螢幕邊框）
+        const rad   = bc.angle * Math.PI / 180;
+        const sin   = Math.sin(rad);
+        const cos   = -Math.cos(rad); // 北=上，cos 反向
+        const scale = 1 / Math.max(Math.abs(sin), Math.abs(cos));
+        const ex    = Math.min(Math.max(50 + sin * scale * 44, 5), 95);
+        const ey    = Math.min(Math.max(50 + cos * scale * 44, 5), 95);
+        return (
           <div
-            key={terrain.id}
-            className={`absolute rounded-[40%] blur-[30px] opacity-20 mix-blend-screen transition-all duration-1000 ${terrain.size} ${terrain.animation}`}
-            style={{ top: terrain.top, left: terrain.left, backgroundColor: terrain.color, transform: 'translate(-50%, -50%) rotate(15deg)' }}
-          />
-        ))}
-      </div>
+            key={i}
+            className="absolute z-[15] pointer-events-none flex flex-col items-center gap-[2px]"
+            style={{ left: `${ex}%`, top: `${ey}%`, transform: 'translate(-50%,-50%)' }}
+          >
+            <div
+              className="w-3 h-3 border-r-2 border-t-2 border-[#FFD700] opacity-70"
+              style={{ transform: `rotate(${bc.angle + 45}deg)` }}
+            />
+            <span className="text-[9px] text-[#FFD700]/60 tracking-wider leading-none">{bc.dist_desc}</span>
+          </div>
+        );
+      })}
 
       {/* 3. 掃描到的事件節點 */}
       {events.map((ev) => {
@@ -551,35 +576,85 @@ export default function ExploreView() {
             <div className="h-1 w-full bg-gradient-to-r from-transparent via-[#00E5FF] to-transparent opacity-50" />
 
             <div className="p-6">
-              {activeModal.step === 'info' && (
-                <>
-                  <h3 className="text-[#00E5FF] text-xl mb-2 font-bold tracking-widest">{activeModal.node.name}</h3>
-                  <p className="text-gray-400 text-sm mb-4 min-h-[40px] leading-relaxed">
-                    {activeModal.node.description || '此地似乎隱藏著某種機緣...'}
-                  </p>
-
-                  <div className="bg-black/40 rounded p-3 mb-4 border border-white/5">
-                    <p className="text-[#FF3B30] text-xs tracking-widest">
-                      預計消耗: {activeModal.node.cost?.sp || 10} 體力
+              {activeModal.step === 'info' && (() => {
+                const nd = activeModal.node;
+                const isSpring  = nd.nodeType === '靈泉';
+                const isPlayer  = nd.nodeType === '道友';
+                const accentColor = isSpring ? '#00E5FF' : isPlayer ? '#C084FC' : '#00E5FF';
+                return (
+                  <>
+                    <h3 className="text-xl mb-2 font-bold tracking-widest" style={{ color: accentColor }}>
+                      {isPlayer ? `道友：${nd.name}` : nd.name}
+                    </h3>
+                    <p className="text-gray-400 text-sm mb-4 min-h-[40px] leading-relaxed">
+                      {nd.description || '此地似乎隱藏著某種機緣...'}
                     </p>
-                  </div>
 
-                  <div className="flex gap-4">
-                    <button onClick={closeModal} className="flex-1 py-2 rounded border border-white/20 text-gray-400 text-sm tracking-widest hover:bg-white/5 active:scale-95 transition-all">
-                      離去
-                    </button>
-                    {activeModal.node.nodeType === '戰鬥' ? (
-                      <button onClick={handleCombatNode} className="flex-1 py-2 rounded bg-[#FF3B30]/10 border border-[#FF3B30]/50 text-[#FF3B30] text-sm tracking-widest shadow-[0_0_10px_rgba(255,59,48,0.2)] hover:bg-[#FF3B30]/20 active:scale-95 transition-all">
-                        應戰
-                      </button>
-                    ) : (
-                      <button onClick={confirmExecuteNode} className="flex-1 py-2 rounded bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] text-sm tracking-widest shadow-[0_0_10px_rgba(0,229,255,0.2)] hover:bg-[#00E5FF]/20 active:scale-95 transition-all">
-                        探索
-                      </button>
+                    {isSpring && (
+                      <div className="bg-black/40 rounded p-3 mb-4 border border-[#00E5FF]/20">
+                        <p className="text-[#00E5FF] text-xs tracking-widest">靈氣 +{nd.aura_amount}</p>
+                      </div>
                     )}
-                  </div>
-                </>
-              )}
+
+                    {isPlayer && (
+                      <div className="bg-black/40 rounded p-3 mb-4 border border-[#C084FC]/20 space-y-1">
+                        <p className="text-[#C084FC] text-xs tracking-widest">切磋：贏得聲望（對方等級 ≥ 自己才加）</p>
+                        <p className="text-[#FF9500] text-xs tracking-widest">掠奪：贏得煞氣 +30 及素材，輸則掉落素材</p>
+                      </div>
+                    )}
+
+                    {!isSpring && !isPlayer && (
+                      <div className="bg-black/40 rounded p-3 mb-4 border border-white/5">
+                        <p className="text-[#FF3B30] text-xs tracking-widest">
+                          預計消耗: {nd.cost?.sp || 0} 體力
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex gap-3">
+                      <button onClick={closeModal} className="flex-1 py-2 rounded border border-white/20 text-gray-400 text-sm tracking-widest hover:bg-white/5 active:scale-95 transition-all">
+                        離去
+                      </button>
+                      {isPlayer ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              const node = activeModal.node;
+                              closeModal();
+                              triggerCombat({
+                                source:         'explore',
+                                pvpType:        'spar',
+                                nodeName:       node.name,
+                                targetPlayerId: node.target_player_id,
+                                onComplete: () => setEvents(prev => prev.filter(e => e.id !== node.id)),
+                              });
+                            }}
+                            className="flex-1 py-2 rounded bg-[#C084FC]/10 border border-[#C084FC]/50 text-[#C084FC] text-sm tracking-widest hover:bg-[#C084FC]/20 active:scale-95 transition-all"
+                          >切磋</button>
+                          <button
+                            onClick={() => {
+                              const node = activeModal.node;
+                              closeModal();
+                              triggerCombat({
+                                source:         'explore',
+                                pvpType:        'plunder',
+                                nodeName:       node.name,
+                                targetPlayerId: node.target_player_id,
+                                onComplete: () => setEvents(prev => prev.filter(e => e.id !== node.id)),
+                              });
+                            }}
+                            className="flex-1 py-2 rounded bg-[#FF9500]/10 border border-[#FF9500]/50 text-[#FF9500] text-sm tracking-widest hover:bg-[#FF9500]/20 active:scale-95 transition-all"
+                          >掠奪</button>
+                        </>
+                      ) : (
+                        <button onClick={confirmExecuteNode} className="flex-1 py-2 rounded bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] text-sm tracking-widest hover:bg-[#00E5FF]/20 active:scale-95 transition-all">
+                          {isSpring ? '汲取' : '探索'}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
 
               {activeModal.step === 'loading' && (
                 <div className="py-8 flex flex-col items-center justify-center">
@@ -603,7 +678,11 @@ export default function ExploreView() {
                       <div className="bg-black/40 rounded p-3 mb-4 border border-white/5 text-xs space-y-1">
                         {activeModal.expGained > 0 && <p className="text-[#32D74B] tracking-widest">靈氣 +{activeModal.expGained}</p>}
                         {activeModal.itemDropped && <p className="text-[#FFD700] tracking-widest">獲得【{activeModal.itemDropped}】×1</p>}
-                        {!activeModal.itemDropped && activeModal.outcome === 'win' && <p className="text-white/30 tracking-widest">此番未有掉落</p>}
+                        {activeModal.prestigeDelta > 0 && <p className="text-[#C084FC] tracking-widest">聲望 +{activeModal.prestigeDelta}</p>}
+                        {activeModal.shaqiDelta > 0 && <p className="text-[#FF9500] tracking-widest">煞氣 +{activeModal.shaqiDelta}</p>}
+                        {activeModal.shaqiDelta < 0 && <p className="text-gray-400 tracking-widest">煞氣 {activeModal.shaqiDelta}</p>}
+                        {activeModal.itemLost && <p className="text-[#FF3B30] tracking-widest">損失【{activeModal.itemLost}】×1</p>}
+                        {!activeModal.itemDropped && !activeModal.prestigeDelta && !activeModal.shaqiDelta && activeModal.outcome === 'win' && <p className="text-white/30 tracking-widest">此番未有掉落</p>}
                       </div>
                     </>
                   ) : (

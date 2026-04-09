@@ -1,6 +1,6 @@
 // server/services/lbsService.js
 import * as db from '../config/db.js';
-import { getGridId, getDistance, getOffsetCoord } from '../utils/geoUtils.js';
+import { getGridId, getDistance, getOffsetCoord, getBearing } from '../utils/geoUtils.js';
 import { calculateOfflineDelta } from '../lib/recovery.js';
 import crypto from 'crypto';
 import { runCombat } from './combatService.js';
@@ -17,9 +17,26 @@ import { runCombat } from './combatService.js';
  */
 const SCAN_COOLDOWN_SEC = 60;
 
+// 聲望等級對照
+const PRESTIGE_LEVELS = [
+  { level: 0, min: 0,    title: '無名之輩' },
+  { level: 1, min: 100,  title: '初出茅廬' },
+  { level: 2, min: 500,  title: '小有名氣' },
+  { level: 3, min: 2000, title: '聲名遠播' },
+  { level: 4, min: 5000, title: '名震一方' },
+];
+function getPrestigeLevel(prestige) {
+  let result = PRESTIGE_LEVELS[0];
+  for (const tier of PRESTIGE_LEVELS) {
+    if (prestige >= tier.min) result = tier;
+  }
+  return result;
+}
+
 export async function performScan(playerId, lat, lng) {
   const playerResult = await db.query(
-    `SELECT ep, max_ep, hp, max_hp, sp, max_sp, aura, realm_level,
+    `SELECT ep, max_ep, hp, max_hp, sp, max_sp, aura, realm_level, mind,
+            prestige, springs_claimed_today, springs_reset_date,
             last_sync_time, last_scan_time
      FROM players WHERE id = $1`,
     [playerId]
@@ -48,12 +65,31 @@ export async function performScan(playerId, lat, lng) {
 
   const gridId = getGridId(lat, lng);
 
+  // ── 格子重複探索懲罰 ─────────────────────────────────────────────
+  // 0–10 分鐘：10%；10–30 分鐘：40%；>30 分鐘：100%
+  let yieldMultiplier = 1.0;
+  let repeatMessage   = null;
+  const gridScanResult = await db.query(
+    `SELECT scanned_at FROM player_grid_scans WHERE player_id = $1 AND grid_id = $2`,
+    [playerId, gridId]
+  );
+  if (gridScanResult.rows.length > 0) {
+    const elapsedMin = (now - new Date(gridScanResult.rows[0].scanned_at)) / 60000;
+    if (elapsedMin < 10) {
+      yieldMultiplier = 0.1;
+      repeatMessage   = `此地靈氣尚未恢復（${Math.ceil(10 - elapsedMin)} 分後恢復四成）`;
+    } else if (elapsedMin < 30) {
+      yieldMultiplier = 0.4;
+      repeatMessage   = `此地靈氣部分恢復（${Math.ceil(30 - elapsedMin)} 分後完全重置）`;
+    }
+  }
+
   // 查詢活躍世界事件
   const eventResult = await db.query(
     `SELECT * FROM world_events WHERE is_active = true AND expires_at > now()`
   );
 
-  // 找最近的事件
+  // 找最近的事件（在危險半徑內）
   let nearestEvent = null;
   let nearestDistance = Infinity;
   for (const event of eventResult.rows) {
@@ -62,6 +98,48 @@ export async function performScan(playerId, lat, lng) {
       nearestEvent = event;
       nearestDistance = dist;
     }
+  }
+
+  // ── 麵包屑：感應到掃描範圍外的世界事件，給出模糊方向提示 ──────────
+  // InfoAccuracy = 0.5 × (1 + 神識/100)，上限 0.95
+  const infoAccuracy = Math.min(0.95, 0.5 * (1 + (player.mind ?? 0) / 100));
+  const maxDirectionError = 90; // 最大偏移角度（低神識）
+  const minDirectionError = 15; // 最小偏移角度（高神識）
+  const directionErrorDeg = (1 - infoAccuracy) * (maxDirectionError - minDirectionError) + minDirectionError;
+
+  // 事件類型係數（影響麵包屑生成機率）
+  const BREADCRUMB_TYPE_COEFF = { '妖獸': 1.2, '靈氣': 1.0, '幻象': 0.8 };
+
+  // dangerLevel 由最近事件的距離衰減決定（無事件則為 0）
+  const dangerLevel = nearestEvent
+    ? (nearestEvent.danger_radius > 0 ? Math.max(0, 1 - nearestDistance / nearestEvent.danger_radius) : 0)
+    : 0;
+
+  const breadcrumbs = [];
+  for (const event of eventResult.rows) {
+    const dist = getDistance(lat, lng, event.lat, event.lng);
+    // 只對掃描範圍外的事件產生麵包屑（範圍內已是 nearestEvent）
+    if (dist < event.danger_radius) continue;
+
+    const typeCoeff = BREADCRUMB_TYPE_COEFF[event.event_type] ?? 1.0;
+    const chance = Math.min(0.8, dangerLevel * typeCoeff + 0.1); // 基礎 10% + 危險加成
+    if (Math.random() > chance) continue;
+
+    // 真實方位角
+    const trueAngle = getBearing(lat, lng, event.lat, event.lng);
+    // 加入誤差（±directionErrorDeg 範圍內隨機偏移）
+    const error = (Math.random() * 2 - 1) * directionErrorDeg;
+    const fuzzyAngle = (trueAngle + error + 360) % 360;
+
+    // 距離描述（模糊化）
+    const distDesc = dist < 500 ? '近處' : dist < 2000 ? '不遠' : dist < 5000 ? '遠方' : '極遠處';
+
+    breadcrumbs.push({
+      angle:     Math.round(fuzzyAngle),
+      dist_desc: distDesc,
+      type:      event.event_type ?? '異象',
+      accuracy:  Math.round(infoAccuracy * 100), // 百分比，給前端顯示用
+    });
   }
 
   // 根據距離決定危險等級
@@ -81,27 +159,46 @@ export async function performScan(playerId, lat, lng) {
     else if (zoneTier === 'danger') zoneTier = 'extreme';
   }
 
-  // 危險等級對應突襲機率
-  const ambushRate = { safe: 0, mid: 0.15, danger: 0.4, extreme: 0.7 };
+  // 危險等級對應基礎突襲機率
+  const baseAmbushRate = { safe: 0, mid: 0.15, danger: 0.4, extreme: 0.7 };
+
+  // 玩家狀態修正（設計公式）
+  // (1 - 神識/200)：神識高 → 降低被偷襲
+  // (1 + (1 - 氣血%))：血越少 → 越容易被盯上
+  // 疲勞：EP 低於 30% 視為疲勞
+  const hpPct      = afterDelta.hp / (player.max_hp || 1);
+  const isExhausted = afterDelta.ep / (player.max_ep || 1) < 0.3 ? 0.3 : 0;
+  const playerFactor = (1 - (player.mind ?? 0) / 200)
+                     * (1 + (1 - hpPct))
+                     * (1 + isExhausted);
+
+  // 最終突襲機率 = 基礎 × 玩家修正，上限 0.8
+  const finalAmbushRate = Math.min(0.8, (baseAmbushRate[zoneTier] ?? 0) * playerFactor);
 
   // 依境界決定可見節點相位
   const isMortal = (player.realm_level ?? 1) <= 1;
   const phaseFilter = isMortal ? `phase IN ('mortal', 'both')` : `phase IN ('immortal', 'both')`;
 
-  // 生成節點（依相位篩選）
-  const nodeCount = Math.floor(Math.random() * 5) + 3;
+  // 生成節點（依相位篩選 + 重複懲罰）
+  const baseNodeCount = Math.floor(Math.random() * 5) + 3;
+  const nodeCount = Math.max(1, Math.round(baseNodeCount * yieldMultiplier));
   const templates = await db.query(
     `SELECT * FROM lbs_node_templates WHERE ${phaseFilter} ORDER BY RANDOM() LIMIT $1`,
     [nodeCount]
   );
 
-  // 節點平均分散在 360° 圓周上，加隨機 ±20° 擾動，距離 60–260m
+  // 探索距離 = 100m（基礎）+ mind/50 × 100m，上限 500m
+  const mind        = player.mind ?? 0;
+  const minDistM    = 40;
+  const maxDistM    = Math.min(500, 100 + (mind / 50) * 100);
+
+  // 節點平均分散在 360° 圓周上，加隨機 ±20° 擾動
   const totalNodes = templates.rows.length;
   const generatedNodes = templates.rows.map((tmpl, idx) => {
-    const isAmbush = tmpl.node_type === '戰鬥' && Math.random() < ambushRate[zoneTier];
+    const isAmbush = tmpl.node_type === '妖獸' && Math.random() < finalAmbushRate;
     const baseAngle = (idx / totalNodes) * 360;
     const angle     = (baseAngle + Math.random() * 40 - 20 + 360) % 360;
-    const distM     = 60 + Math.random() * 200;
+    const distM     = minDistM + Math.random() * (maxDistM - minDistM);
     const { lat: nodeLat, lng: nodeLng } = getOffsetCoord(lat, lng, distM, angle);
     return {
       instance_id:        crypto.randomUUID(),
@@ -119,6 +216,70 @@ export async function performScan(playerId, lat, lng) {
     };
   });
 
+  // ── 靈泉生成（個人化，每日上限 3 + realm_level）────────────────────
+  const springRate   = { safe: 0.10, mid: 0.15, danger: 0.20, extreme: 0.30 };
+  const maxSprings   = 3 + (player.realm_level ?? 1);
+  const todayDate    = now.toISOString().slice(0, 10);
+  const springsToday = (player.springs_reset_date?.toISOString?.()?.slice(0, 10) === todayDate)
+    ? (player.springs_claimed_today ?? 0) : 0;
+
+  if (springsToday < maxSprings && Math.random() < (springRate[zoneTier] ?? 0.1)) {
+    const auraAmount = Math.floor(Math.random() * 131) + 20; // 20–150
+    const springNames = ['清靈泉', '玄靈泉', '碧靈泉', '金靈泉', '幽靈泉'];
+    const angle  = Math.random() * 360;
+    const distM  = minDistM + Math.random() * (maxDistM - minDistM);
+    const { lat: sLat, lng: sLng } = getOffsetCoord(lat, lng, distM, angle);
+    generatedNodes.push({
+      instance_id:        crypto.randomUUID(),
+      type:               '靈泉',
+      name:               springNames[Math.floor(Math.random() * springNames.length)],
+      description:        `泉水潺潺，靈氣充盈，可吸收 ${auraAmount} 點靈氣。`,
+      aura_amount:        auraAmount,
+      cost_sp:            0,
+      cost_hp:            0,
+      is_ambush:          false,
+      expires_in_seconds: 600,
+      node_lat:           sLat,
+      node_lng:           sLng,
+    });
+  }
+
+  // ── 道友生成（全服隨機，15% 機率）──────────────────────────────────
+  if (Math.random() < 0.15) {
+    const targetResult = await db.query(
+      `SELECT id, name, realm_level, prestige,
+              COALESCE(rt.name, '凡人') AS realm_name
+       FROM players p
+       LEFT JOIN realm_templates rt ON rt.level = p.realm_level
+       WHERE p.id != $1
+       ORDER BY RANDOM() LIMIT 1`,
+      [playerId]
+    );
+    if (targetResult.rows.length > 0) {
+      const target     = targetResult.rows[0];
+      const presLvl    = getPrestigeLevel(target.prestige);
+      const angle  = Math.random() * 360;
+      const distM  = minDistM + Math.random() * (maxDistM - minDistM);
+      const { lat: dLat, lng: dLng } = getOffsetCoord(lat, lng, distM, angle);
+      generatedNodes.push({
+        instance_id:        crypto.randomUUID(),
+        type:               '道友',
+        name:               target.name,
+        description:        `${target.realm_name} · ${presLvl.title}`,
+        target_player_id:   target.id,
+        target_prestige:    target.prestige,
+        target_prestige_level: presLvl.level,
+        target_realm_level: target.realm_level ?? 1,
+        cost_sp:            0,
+        cost_hp:            0,
+        is_ambush:          false,
+        expires_in_seconds: 600,
+        node_lat:           dLat,
+        node_lng:           dLng,
+      });
+    }
+  }
+
   // flush + 扣 EP
   const newEp = afterDelta.ep - 10;
   await db.query(
@@ -126,6 +287,14 @@ export async function performScan(playerId, lat, lng) {
      SET hp=$1, sp=$2, ep=$3, last_sync_time=$4, last_scan_time=$4
      WHERE id=$5`,
     [afterDelta.hp, afterDelta.sp, newEp, now, playerId]
+  );
+
+  // 更新格子掃描記錄
+  await db.query(
+    `INSERT INTO player_grid_scans (player_id, grid_id, scanned_at)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (player_id, grid_id) DO UPDATE SET scanned_at = $3`,
+    [playerId, gridId, now]
   );
 
   return {
@@ -138,15 +307,20 @@ export async function performScan(playerId, lat, lng) {
       type:     nearestEvent.event_type,
       distance: Math.round(nearestDistance),
     } : null,
-    yield_multiplier: 1.0,
-    nodes:         generatedNodes,
+    yield_multiplier: yieldMultiplier,
+    repeat_message:  repeatMessage,
+    scan_range_m:    Math.round(maxDistM),
+    breadcrumbs:     breadcrumbs,
+    nodes:           generatedNodes,
   };
 }
 
-export async function performExecution(playerId, nodeType, nodeName, stance = 'balanced') {
+export async function performExecution(playerId, nodeType, nodeName, stance = 'balanced', options = {}) {
     // 取得玩家當前狀態（含 last_sync_time，用於 delta flush）
     const playerResult = await db.query(
-        `SELECT hp, max_hp, sp, max_sp, ep, max_ep, aura, last_sync_time
+        `SELECT hp, max_hp, sp, max_sp, ep, max_ep, aura, realm_level,
+                prestige, sha_qi, springs_claimed_today, springs_reset_date,
+                last_sync_time
          FROM players WHERE id = $1`,
         [playerId]
     );
@@ -229,6 +403,151 @@ export async function performExecution(playerId, nodeType, nodeName, stance = 'b
     } else if (nodeType === '戰鬥') {
         // 相容舊節點類型
         return await runCombat(playerId, stance);
+
+    } else if (nodeType === '靈泉') {
+        // 每日上限檢查
+        const todayDate    = now.toISOString().slice(0, 10);
+        const resetDate    = player.springs_reset_date?.toISOString?.()?.slice(0, 10);
+        const claimedToday = resetDate === todayDate ? (player.springs_claimed_today ?? 0) : 0;
+        const maxSprings   = 3 + (player.realm_level ?? 1);
+        if (claimedToday >= maxSprings) throw new Error(`今日靈泉已採盡（上限 ${maxSprings} 處）`);
+
+        const auraGain = options.aura_amount ?? 50;
+        const newAura  = Math.min(player.aura + auraGain, player.max_aura ?? 9999);
+
+        await db.query(
+            `UPDATE players SET aura = $1,
+                springs_claimed_today = $2,
+                springs_reset_date    = $3,
+                last_sync_time        = $4
+             WHERE id = $5`,
+            [newAura, claimedToday + 1, todayDate, now, playerId]
+        );
+
+        return {
+            cost_hp: 0, cost_sp: 0,
+            hp: afterDelta.hp, sp: afterDelta.sp, ep: afterDelta.ep,
+            aura: newAura,
+            message:      `你沉浸於靈泉之中，吸收了 ${auraGain} 點靈氣（今日已採 ${claimedToday + 1}/${maxSprings}）。`,
+            item_dropped: null,
+            battleLog:    null,
+            spirit_root_gain: null,
+        };
+
+    } else if (nodeType === '道友') {
+        const { target_player_id, pvp_type = 'spar' } = options;
+        if (!target_player_id) throw new Error('目標道友資訊遺失');
+
+        // 取得目標玩家戰鬥屬性
+        const targetResult = await db.query(
+            `SELECT id, name, attack, defense, hp, max_hp, realm_level, prestige
+             FROM players WHERE id = $1`,
+            [target_player_id]
+        );
+        if (targetResult.rows.length === 0) throw new Error('目標道友已離去');
+        const target = targetResult.rows[0];
+
+        // 用 ATB 引擎模擬戰鬥（以目標玩家數值為敵方）
+        const combatResult = await runCombat(playerId, stance, {
+            name:          target.name,
+            hp:            target.hp,
+            max_hp:        target.max_hp,
+            attack:        target.attack,
+            defense:       target.defense,
+            realm_level:   target.realm_level ?? 1,
+            mind:          0,
+            element:       null,
+            skills:        [],
+            exp_reward:    0,
+            drop_item_name: null,
+            drop_rate:     0,
+        });
+
+        const win = combatResult.outcome === 'win';
+        const myPrestigeLevel  = getPrestigeLevel(player.prestige ?? 0).level;
+        const tgtPrestigeLevel = getPrestigeLevel(target.prestige ?? 0).level;
+
+        let prestigeDelta = 0;
+        let shaqiDelta    = 0;
+        let itemLost      = null;
+
+        if (pvp_type === 'spar') {
+            // 切磋：贏且對方聲望 >= 自己才加聲望
+            if (win && tgtPrestigeLevel >= myPrestigeLevel) {
+                prestigeDelta = (tgtPrestigeLevel - myPrestigeLevel + 1) * 20;
+            }
+        } else if (pvp_type === 'plunder') {
+            if (win) {
+                shaqiDelta = 30;
+                // 隨機奪取目標一件素材
+                const itemResult = await db.query(
+                    `SELECT pi.item_id, i.name FROM player_inventory pi
+                     JOIN items i ON i.id = pi.item_id
+                     WHERE pi.player_id = $1 AND pi.quantity > 0
+                     ORDER BY RANDOM() LIMIT 1`,
+                    [target.id]
+                );
+                if (itemResult.rows.length > 0) {
+                    itemLost = itemResult.rows[0].name;
+                    // 從目標背包扣除
+                    await db.query(
+                        `UPDATE player_inventory SET quantity = quantity - 1
+                         WHERE player_id = $1 AND item_id = $2`,
+                        [target.id, itemResult.rows[0].item_id]
+                    );
+                    // 加入自己背包
+                    await db.query(
+                        `INSERT INTO player_inventory (player_id, item_id, quantity)
+                         VALUES ($1, $2, 1)
+                         ON CONFLICT (player_id, item_id)
+                         DO UPDATE SET quantity = player_inventory.quantity + 1`,
+                        [playerId, itemResult.rows[0].item_id]
+                    );
+                }
+            } else {
+                shaqiDelta = -10;
+                // 自己隨機掉一件素材
+                const itemResult = await db.query(
+                    `SELECT pi.item_id, i.name FROM player_inventory pi
+                     JOIN items i ON i.id = pi.item_id
+                     WHERE pi.player_id = $1 AND pi.quantity > 0
+                     ORDER BY RANDOM() LIMIT 1`,
+                    [playerId]
+                );
+                if (itemResult.rows.length > 0) {
+                    itemLost = itemResult.rows[0].name;
+                    await db.query(
+                        `UPDATE player_inventory SET quantity = quantity - 1
+                         WHERE player_id = $1 AND item_id = $2`,
+                        [playerId, itemResult.rows[0].item_id]
+                    );
+                }
+            }
+        }
+
+        // 寫入 pvp_logs + 更新聲望/煞氣
+        await db.query(
+            `INSERT INTO pvp_logs (attacker_id, defender_id, pvp_type, outcome, prestige_delta, sha_qi_delta, item_lost)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [playerId, target.id, pvp_type, win ? 'win' : 'lose', prestigeDelta, shaqiDelta, itemLost]
+        );
+        if (prestigeDelta !== 0 || shaqiDelta !== 0) {
+            await db.query(
+                `UPDATE players SET prestige = GREATEST(0, prestige + $1),
+                                    sha_qi   = GREATEST(0, sha_qi   + $2)
+                 WHERE id = $3`,
+                [prestigeDelta, shaqiDelta, playerId]
+            );
+        }
+
+        return {
+            ...combatResult,
+            pvp_type,
+            prestige_delta: prestigeDelta,
+            sha_qi_delta:   shaqiDelta,
+            item_lost:      itemLost,
+            target_name:    target.name,
+        };
 
     } else {
         rewardMessage = `你在【${nodeName}】靜坐片刻，心境似乎有所提升。`;

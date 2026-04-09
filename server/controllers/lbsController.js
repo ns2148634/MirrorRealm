@@ -29,13 +29,13 @@ export async function scanLbsNodes(req, res) {
 // 2. 處理點擊節點互動的 Controller
 export async function executeLbsNode(req, res) {
     try {
-        const { playerId, nodeType, nodeName, stance } = req.body;
+        const { playerId, nodeType, nodeName, stance, ...options } = req.body;
 
         if (!nodeType) {
             return res.status(400).json({ error: "缺少節點資訊" });
         }
 
-        const executeResult = await performExecution(playerId, nodeType, nodeName, stance);
+        const executeResult = await performExecution(playerId, nodeType, nodeName, stance, options);
 
         return res.status(200).json({
             status: "success",

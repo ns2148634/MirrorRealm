@@ -1,3 +1,11 @@
+export function getBearing(lat1, lng1, lat2, lng2) {
+  const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+  const Δλ = (lng2 - lng1) * Math.PI / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
 export function getGridId(lat, lng) {
     const gridLat = lat.toFixed(3);
     const gridLng = lng.toFixed(3);

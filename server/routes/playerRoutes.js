@@ -11,17 +11,21 @@ import {
     unequipPlayerItem,
     getPlayerFriends,
     getPlayerSect,
+    craftPlayerItem,
+    getPlayerProficiency,
 } from '../controllers/playerController.js';
 
 const router = express.Router();
 
 // GET 具名路由必須放在 /:playerId 萬用路由之前，否則會被攔截
-router.get('/friends',              getPlayerFriends);
-router.get('/sect',                 getPlayerSect);
-router.get('/backpack/:playerId',   getPlayerBackpack);
-router.get('/equipment/:playerId',  getPlayerEquipment);
-router.get('/:playerId',            getPlayerStatusHandler);
+router.get('/friends',                  getPlayerFriends);
+router.get('/sect',                     getPlayerSect);
+router.get('/proficiency/:playerId',    getPlayerProficiency);
+router.get('/backpack/:playerId',       getPlayerBackpack);
+router.get('/equipment/:playerId',      getPlayerEquipment);
+router.get('/:playerId',                getPlayerStatusHandler);
 
+router.post('/craft',       craftPlayerItem);
 router.post('/meditate',    mediatePlayer);
 router.post('/use-item',    usePlayerItem);
 router.post('/breakthrough', breakthroughPlayer);
