@@ -5,17 +5,6 @@ import { calculateOfflineDelta } from '../lib/recovery.js';
 import crypto from 'crypto';
 import { runCombat } from './combatService.js';
 
-/**
- * 掃描冷卻說明：
- *   為防止玩家短時間內重複掃描反覆扣 EP，加入 60 秒玩家級冷卻。
- *   冷卻狀態存在 players.last_scan_time 欄位。
- *
- *   若尚未執行以下 migration，請先在 Supabase SQL Editor 執行：
- *     ALTER TABLE players ADD COLUMN IF NOT EXISTS last_scan_time TIMESTAMPTZ;
- *
- *   如果欄位不存在，查詢回傳 undefined，程式會直接跳過冷卻判定（優雅降級）。
- */
-const SCAN_COOLDOWN_SEC = 60;
 
 // 聲望等級對照
 const PRESTIGE_LEVELS = [
@@ -45,14 +34,6 @@ export async function performScan(playerId, lat, lng) {
 
   const player = playerResult.rows[0];
   const now = new Date();
-
-  if (player.last_scan_time) {
-    const elapsed = (now - new Date(player.last_scan_time)) / 1000;
-    if (elapsed < SCAN_COOLDOWN_SEC) {
-      const remaining = Math.ceil(SCAN_COOLDOWN_SEC - elapsed);
-      throw new Error(`靈覺尚未恢復，請稍後再次探索（剩餘 ${remaining} 秒）`);
-    }
-  }
 
   const afterDelta = calculateOfflineDelta(player, now);
   if (afterDelta.ep < 10) {

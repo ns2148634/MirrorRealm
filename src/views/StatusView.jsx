@@ -153,27 +153,26 @@ export default function StatusView() {
   };
 
   return (
-    <div className="h-full w-full relative bg-transparent overflow-y-auto flex flex-col items-center pt-[8vh] pb-[calc(env(safe-area-inset-bottom,20px)+8vh)]">
+    <div className="h-full w-full relative bg-transparent overflow-hidden flex flex-col items-center justify-evenly py-2">
 
       {/* 全螢幕突破閃光 */}
       {showFlash && (
         <div className="fixed inset-0 z-[100] bg-white/30 backdrop-blur-sm pointer-events-none animate-ping" />
       )}
 
-
-      {/* ── 靈根陣盤 ─────────────────────────────────────── */}
-      <div className="relative w-full max-w-[320px] flex-shrink-0 flex flex-col items-center justify-center" style={{ height: '38vh' }}>
+      {/* ── 靈根陣盤：canvas 保持 320×320 繪圖精度，用 CSS 縮小顯示 ── */}
+      <div className="relative shrink-0 flex items-center justify-center" style={{ width: '200px', height: '200px' }}>
         <canvas ref={canvasRef} width="320" height="320"
-          className="absolute inset-0 w-full h-full object-contain z-0 pointer-events-none" />
+          className="w-full h-full object-contain z-0 pointer-events-none" />
       </div>
 
       {/* 周天靈氣 / 突破按鈕 */}
       {canBreak ? (
-        <div className="shrink-0 mb-3 w-full max-w-[260px]">
+        <div className="shrink-0 mb-2 w-full max-w-[240px]">
           <button
             onClick={handleBreakthrough}
             disabled={isBreaking}
-            className="w-full py-2.5 rounded-lg text-sm tracking-[0.4em] font-serif transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-2 rounded-lg text-sm tracking-[0.4em] font-serif transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               background: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,140,0,0.15))',
               border:     '1px solid rgba(255,215,0,0.6)',
@@ -186,14 +185,14 @@ export default function StatusView() {
           </button>
         </div>
       ) : (
-        <div className="text-[clamp(11px,3.5cqw,14px)] text-white/80 tracking-[0.2em] font-serif text-center shrink-0 mb-[3vh]">
+        <div className="text-[clamp(10px,3cqw,13px)] text-white/70 tracking-[0.2em] font-serif text-center shrink-0 mb-1">
           周天靈氣 {aura} / {maxAura}
           {isMaxRealm && <span className="ml-2 text-[#FFD700]/60">（已臻巔峰）</span>}
         </div>
       )}
 
       {/* ── 命格資訊區 ──────────────────────────────────────────── */}
-      <div className="flex flex-row justify-center items-start gap-[8cqw] px-[8cqw] w-full max-w-[360px] shrink-0 z-10 mb-4">
+      <div className="flex flex-row justify-center items-start gap-[6cqw] px-[6cqw] w-full max-w-[360px] shrink-0 z-10">
 
         {/* 左：道號垂排 */}
         <div

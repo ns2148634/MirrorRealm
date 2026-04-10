@@ -353,10 +353,10 @@ export async function runCombat(playerId, stance = 'balanced', enemyOverride = n
 
     if (itemDropped) {
         await db.query(
-            `INSERT INTO player_items (player_id, item_id, quantity)
+            `INSERT INTO player_inventory (player_id, item_id, quantity)
              SELECT $1, id, 1 FROM items WHERE name = $2
              ON CONFLICT (player_id, item_id)
-             DO UPDATE SET quantity = player_items.quantity + 1`,
+             DO UPDATE SET quantity = player_inventory.quantity + 1`,
             [playerId, itemDropped]
         );
     }

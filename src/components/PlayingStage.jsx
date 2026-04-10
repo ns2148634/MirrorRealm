@@ -11,10 +11,24 @@ import StatOrbs from '../components/StatOrbs'; // 根據你的資料夾路徑調
 
 export default function PlayingStage() {
   const [currentMode, setCurrentMode] = useState('status');
-  const player = useGameStore((state) => state.player);
+  const [breakConfirm, setBreakConfirm] = useState(false); // 中斷調息確認框
+  const player        = useGameStore((state) => state.player);
+  const isMeditating  = useGameStore((state) => state.isMeditating);
+  const setMeditating = useGameStore((state) => state.setMeditating);
 
   const triggerHaptic = () => {
     if (navigator.vibrate) navigator.vibrate(10);
+  };
+
+  // 調息中點擊內容區 → 跳確認框
+  const handleContentClick = () => {
+    if (!isMeditating) return;
+    setBreakConfirm(true);
+  };
+
+  const confirmBreak = () => {
+    setMeditating(false);
+    setBreakConfirm(false);
   };
 
   // 🛡️ 防呆護法陣：如果資料庫還沒傳回資料，先顯示載入畫面！
@@ -42,9 +56,40 @@ export default function PlayingStage() {
         {currentMode === 'cultivate' && <CultivateView />}
         {currentMode === 'explore' && <ExploreView />}
         {currentMode === 'bag' && <BagView />}
-        
-        {/* 🌟 核心替換：將原本的 [仙網連線中] 換成大千世界 (WorldView) */}
         {currentMode === 'network' && <WorldView />}
+
+        {/* 調息攔截遮罩：調息中覆蓋內容區，攔截所有操作 */}
+        {isMeditating && (
+          <div
+            className="absolute inset-0 z-50 cursor-pointer"
+            onClick={handleContentClick}
+          />
+        )}
+
+        {/* 中斷調息確認框 */}
+        {breakConfirm && (
+          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-[#12141A] border border-[#FFD700]/30 rounded-2xl w-[280px] overflow-hidden text-center shadow-[0_0_40px_rgba(255,215,0,0.15)]">
+              <div className="h-1 w-full bg-gradient-to-r from-transparent via-[#FFD700] to-transparent opacity-50" />
+              <div className="p-7">
+                <p className="text-[#FFD700] text-xl font-bold tracking-widest mb-2">定神調息中</p>
+                <p className="text-white/50 text-sm tracking-wider mb-7 leading-relaxed">
+                  中斷調息將停止體力・精力・氣血的加速回復
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setBreakConfirm(false)}
+                    className="flex-1 py-3 rounded-xl border border-white/20 text-white/50 text-base tracking-widest active:scale-95 transition-all"
+                  >繼續調息</button>
+                  <button
+                    onClick={confirmBreak}
+                    className="flex-1 py-3 rounded-xl bg-[#FFD700]/10 border border-[#FFD700]/50 text-[#FFD700] text-base tracking-widest active:scale-95 transition-all"
+                  >中斷調息</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* =========================================

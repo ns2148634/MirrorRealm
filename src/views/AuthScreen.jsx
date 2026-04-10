@@ -30,7 +30,6 @@ export default function AuthScreen() {
   const createCharacter       = useGameStore(s => s.createCharacter);
 
   const [phase,     setPhase]     = useState('waiting');  // waiting|stars|login|create
-  const [flashing,  setFlashing]  = useState(false);
   const [stars,     setStars]     = useState([]);
   const [edges,     setEdges]     = useState([]);
   const [linesReady, setLinesReady] = useState(false); // 全部星出完後才 true
@@ -84,12 +83,10 @@ export default function AuthScreen() {
       const allLinesDone = allStarsDone + LINE_GAP + (newEdges.length - 1) * LINE_BEAT + LINE_DUR;
 
       const t1 = setTimeout(() => setLinesReady(true),  allStarsDone * 1000);
-      const t2 = setTimeout(() => setFlashing(true),    (allLinesDone + 0.1) * 1000);
-      const t3 = setTimeout(() => setFlashing(false),   (allLinesDone + 1.4) * 1000);
-      const t4 = setTimeout(() => setPhase('login'),    (allLinesDone + 1.2) * 1000);
-      const t5 = setTimeout(() => markIntroFinished(),  (allLinesDone + 1.2) * 1000);
+      const t2 = setTimeout(() => setPhase('login'),   (allLinesDone + 1.2) * 1000);
+      const t3 = setTimeout(() => markIntroFinished(), (allLinesDone + 1.2) * 1000);
 
-      return () => [t1, t2, t3, t4, t5].forEach(clearTimeout);
+      return () => [t1, t2, t3].forEach(clearTimeout);
     });
   }, []);
 
@@ -216,70 +213,57 @@ export default function AuthScreen() {
           from { opacity: 0; transform: translateY(24px); }
           to   { opacity: 1; transform: translateY(0);    }
         }
+        @keyframes stars-fade-out {
+          0%   { opacity: 1; filter: brightness(1); }
+          40%  { opacity: 0.3; filter: brightness(0.3); }
+          100% { opacity: 0; filter: brightness(0); }
+        }
+        .stars-fade-out { animation: stars-fade-out 1.0s ease-in forwards; }
 
-        /* ── 法器啟動光效 ── */
-        /* 中心白核：極短的爆閃 */
-        @keyframes artifact-core {
-          0%   { opacity: 0;    transform: scale(0);   }
-          8%   { opacity: 1;    transform: scale(1);   }
-          30%  { opacity: 0.85; transform: scale(1.1); }
-          100% { opacity: 0;    transform: scale(2.5); }
+        /* ── 星光炸裂：從星斗散開充滿螢幕，再緩慢消散 ── */
+
+        /* 1. 中心核爆：瞬間爆閃 */
+        @keyframes star-burst-core {
+          0%   { opacity: 0; transform: scale(0.05); }
+          12%  { opacity: 1; transform: scale(1); }
+          35%  { opacity: 1; transform: scale(1.05); }
+          100% { opacity: 0; transform: scale(1.1); }
         }
-        /* 外擴衝擊環 */
-        @keyframes artifact-ring {
-          0%   { opacity: 0.9; transform: scale(0.1); }
-          100% { opacity: 0;   transform: scale(3.5); }
+        /* 2. 光芒充滿螢幕：迅速擴張後緩慢淡出 */
+        @keyframes star-burst-fill {
+          0%   { opacity: 0;   transform: scale(0.08); }
+          18%  { opacity: 1;   transform: scale(1); }
+          40%  { opacity: 0.9; transform: scale(1); }
+          100% { opacity: 0;   transform: scale(1); }
         }
-        /* 散射光柱（偽造用旋轉蒙版） */
-        @keyframes artifact-ray {
-          0%   { opacity: 0.7; transform: scale(0) rotate(0deg); }
-          40%  { opacity: 0.5; }
-          100% { opacity: 0;   transform: scale(2.5) rotate(15deg); }
+        /* 3. 光粒子輻射：多條細光線從中心向外炸射 */
+        @keyframes star-burst-ray {
+          0%   { opacity: 0; transform: scale(0) rotate(0deg); }
+          15%  { opacity: 0.8; transform: scale(1) rotate(0deg); }
+          50%  { opacity: 0.4; transform: scale(1) rotate(8deg); }
+          100% { opacity: 0;   transform: scale(1) rotate(15deg); }
         }
-        /* 全畫面淡暈（比 ring 慢，補充餘韻） */
-        @keyframes artifact-glow {
-          0%   { opacity: 0;   }
-          10%  { opacity: 0.4; }
-          100% { opacity: 0;   }
+        /* 4. 衝擊環：快速外擴並消失 */
+        @keyframes star-burst-ring {
+          0%   { opacity: 1; transform: scale(0.05); }
+          60%  { opacity: 0.5; transform: scale(1); }
+          100% { opacity: 0;   transform: scale(1.08); }
         }
-        .artifact-core  { animation: artifact-core  1.3s ease-out forwards; }
-        .artifact-ring1 { animation: artifact-ring  0.9s ease-out forwards; }
-        .artifact-ring2 { animation: artifact-ring  1.1s 0.08s ease-out forwards; }
-        .artifact-ring3 { animation: artifact-ring  1.4s 0.18s ease-out forwards; }
-        .artifact-ray   { animation: artifact-ray   1.2s ease-out forwards; }
-        .artifact-glow  { animation: artifact-glow  1.5s ease-out forwards; }
+
+        .burst-fill  { animation: star-burst-fill  3.1s cubic-bezier(0.25,0.46,0.45,0.94) forwards; }
+        .burst-core  { animation: star-burst-core  2.0s ease-out forwards; }
+        .burst-ray   { animation: star-burst-ray   2.4s ease-out forwards; }
+        .burst-ring1 { animation: star-burst-ring  1.1s ease-out forwards; }
+        .burst-ring2 { animation: star-burst-ring  1.5s 0.1s ease-out forwards; }
+        .burst-ring3 { animation: star-burst-ring  2.0s 0.2s ease-out forwards; }
       `}</style>
 
-      {/* 法器啟動光效（取代舊版純色閃光） */}
-      {flashing && (
-        <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center">
-          {/* 全畫面底部暈光 */}
-          <div className="artifact-glow absolute inset-0"
-            style={{ background: 'radial-gradient(ellipse at center, rgba(0,229,255,0.35) 0%, rgba(0,100,160,0.15) 50%, transparent 80%)' }}
-          />
-          {/* 射線十字 */}
-          <div className="artifact-ray absolute w-[200vmax] h-[200vmax]"
-            style={{ background: 'conic-gradient(from 0deg, transparent 0deg, rgba(0,229,255,0.18) 2deg, transparent 4deg, transparent 88deg, rgba(180,240,255,0.12) 90deg, transparent 92deg, transparent 178deg, rgba(0,229,255,0.18) 180deg, transparent 182deg, transparent 268deg, rgba(180,240,255,0.12) 270deg, transparent 272deg)' }}
-          />
-          {/* 衝擊環 × 3 */}
-          <div className="artifact-ring1 absolute w-40 h-40 rounded-full border-[2px] border-[#00E5FF]"
-            style={{ boxShadow: '0 0 24px 4px rgba(0,229,255,0.6), inset 0 0 12px rgba(0,229,255,0.3)' }}
-          />
-          <div className="artifact-ring2 absolute w-40 h-40 rounded-full border-[1px] border-[#7DF9FF]"
-            style={{ boxShadow: '0 0 16px 2px rgba(125,249,255,0.4)' }}
-          />
-          <div className="artifact-ring3 absolute w-40 h-40 rounded-full border-[0.5px] border-white/40" />
-          {/* 中心核 */}
-          <div className="artifact-core absolute w-28 h-28 rounded-full"
-            style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(0,229,255,0.8) 40%, transparent 75%)', boxShadow: '0 0 40px 20px rgba(0,229,255,0.5), 0 0 80px 40px rgba(0,180,220,0.2)' }}
-          />
-        </div>
-      )}
 
       {/* ── 星圖 ── */}
       {(phase === 'stars') && stars.length > 0 && (
         <svg
-          className="absolute inset-0 w-full h-full pointer-events-none"
+          className={`absolute inset-0 w-full h-full pointer-events-none ${linesReady ? 'stars-fade-out' : ''}`}
+          style={linesReady ? { animationDelay: `${(edges.length - 1) * LINE_BEAT + LINE_DUR + 0.2}s` } : {}}
           viewBox="0 0 320 220"
           preserveAspectRatio="xMidYMid meet"
         >

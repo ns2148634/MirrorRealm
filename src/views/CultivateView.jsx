@@ -252,12 +252,12 @@ export default function CultivateView() {
         .animate-shrink-in-fade { animation: shrink-in-fade 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
       `}</style>
 
-      <div className="flex-1 flex flex-col px-[5cqw] pb-[calc(env(safe-area-inset-bottom,20px)+2vh)] overflow-hidden">
-        
+      <div className="flex-1 flex flex-col px-[5cqw] overflow-hidden">
+
         {/* =========================================
-            🌟 丹田氣旋 (人像固定不動，只有法陣淡入淡出)
+            🌟 丹田氣旋 (人像固定不動，只有法陣淡入淡出)  — 上半 50%
             ========================================= */}
-        <div className="relative w-full max-w-[260px] mx-auto aspect-[4/5] max-h-[42vh] flex items-center justify-center shrink mb-[2vh]">
+        <div className="relative w-full max-w-[260px] mx-auto flex items-center justify-center" style={{ height: '50%' }}>
           {/* 打坐人像背景 (永遠顯示，不參與動畫) */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
              <div className="w-[80%] h-[80%] rounded-full animate-pulse opacity-20 blur-[40px]" style={{ backgroundColor: auraColor }}></div>
@@ -299,41 +299,29 @@ export default function CultivateView() {
         </div>
 
         {/* =========================================
-            🌟 底部法寶區 (Absolute 切換)
+            🌟 底部法寶區 (Absolute 切換)  — 下半 50%
             ========================================= */}
-        <div className="flex-1 relative w-full max-w-[320px] mx-auto">
+        <div className="relative w-full max-w-[320px] mx-auto" style={{ height: '50%' }}>
           
           {/* L1 底部：主副功法與陣法 (純瀏覽) */}
-         {/* L1 底部：主副功法與陣法 (純瀏覽) */}
-<div className={`absolute inset-0 flex flex-col ${getL1AnimationClass()}`}>
-  {/* 🌟 改為相對空間，讓圖騰在內部自由散落 */}
-  <div className="relative w-full flex-grow mt-[2vh]">
-    
-    {/* 主功法 (左上方，最大) */}
-    <div className="absolute top-[10%] left-[20%] scale-[2] z-10">
-      <FloatingIcon type="main" isActive={true} hideCount={true} color={auraColor} delay="0s" onClick={() => handleBrowseLibrary('main')} />
-    </div>
-
-    {/* 副功法 (右方偏中，次大) */}
-    <div className="absolute top-[25%] right-[18%] scale-[2] z-10">
-      <FloatingIcon type="sub" isActive={true} hideCount={true} color={auraColor} delay="0.8s" onClick={() => handleBrowseLibrary('sub')} />
-    </div>
-
-    {/* 陣法 (左方偏下，次大) */}
-    <div className="absolute bottom-[15%] left-[45%] -translate-x-1/2 scale-[2] z-10">
-      <FloatingIcon type="formation" isActive={true} hideCount={true} color={auraColor} delay="1.5s" onClick={() => handleBrowseLibrary('formation')} />
-    </div>
-
-  </div>
-{/* 🌟 新增：與 BagView 一致的底部神識提示 */}
-            <div 
-              className="absolute bottom-[calc(env(safe-area-inset-bottom,20px)+2cqw)] w-full text-center tracking-[0.5em] text-[12px] opacity-40 pointer-events-none"
-              style={{ color: auraColor }}
-            >
+          <div className={`absolute inset-0 flex flex-col items-center justify-evenly pb-4 ${getL1AnimationClass()}`}>
+            <div className="flex justify-around items-center w-full px-[10%]">
+              <div className="scale-[2]">
+                <FloatingIcon type="main" isActive={true} hideCount={true} color={auraColor} delay="0s" onClick={() => handleBrowseLibrary('main')} />
+              </div>
+              <div className="scale-[2]">
+                <FloatingIcon type="sub" isActive={true} hideCount={true} color={auraColor} delay="0.8s" onClick={() => handleBrowseLibrary('sub')} />
+              </div>
+            </div>
+            <div className="flex justify-center w-full">
+              <div className="scale-[2]">
+                <FloatingIcon type="formation" isActive={true} hideCount={true} color={auraColor} delay="1.5s" onClick={() => handleBrowseLibrary('formation')} />
+              </div>
+            </div>
+            <div className="absolute bottom-[calc(env(safe-area-inset-bottom,20px)+10cqw)] w-full text-center tracking-[0.5em] text-[12px] opacity-40 pointer-events-none" style={{ color: auraColor }}>
               推演萬法以禦敵
             </div>
-  
-</div>
+          </div>
 
           {/* L2 底部：五大法寶與神識條 (裝備模式) */}
           <div className={`absolute inset-0 flex flex-col ${getL2AnimationClass()}`}>

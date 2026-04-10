@@ -1,7 +1,7 @@
 // src/views/ExploreView.jsx
 import { useState, useRef, useEffect } from 'react';
 import useGameStore from '../store/gameStore';
-// maplibre-gl 改為動態載入：避免手機瀏覽器 WebGL2 初始化失敗時崩潰整個 app
+import 'maplibre-gl/dist/maplibre-gl.css';
 
 // 非戰鬥節點探索結果顏色（戰鬥結果由全域 CombatModal 顯示）
 const LOG_LINE_COLOR = {
@@ -37,17 +37,37 @@ const ZONE_ATMOSPHERE = {
 };
 
 // 地圖底層樣式（純街道形狀，不含標籤）
+// 地圖底層樣式（純街道形狀，不含標籤）
+// 地圖底層樣式（CartoDB 暗黑無字版街景）
 const MAP_STYLE = {
   version: 8,
   sources: {
-    osm: {
+    carto: {
       type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tiles: [
+        'https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+        'https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+        'https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+        'https://d.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png'
+      ],
       tileSize: 256,
-      attribution: '© OpenStreetMap contributors',
+      attribution: '© OpenStreetMap contributors © CARTO',
     },
   },
-  layers: [{ id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-opacity': 1 } }],
+  layers: [
+    {
+      // 🌟 新增：純黑底色層。確保就算網路慢，也能立刻遮蔽底下的青色網格
+      id: 'bg',
+      type: 'background',
+      paint: { 'background-color': '#05070a' } 
+    },
+    { 
+      id: 'carto', 
+      type: 'raster', 
+      source: 'carto', 
+      paint: { 'raster-opacity': 0.8 } // 0.8 微透，讓它完美融入賽博氛圍
+    }
+  ],
 };
 
 
@@ -75,20 +95,17 @@ export default function ExploreView() {
   const mapContainerRef = useRef(null);
   const playerPosRef   = useRef(null); // { lat, lng }
 
-  // 離開頁面時重置調息狀態
+  // 頁面掛載/重新進入時，同步全局調息狀態到局部動畫狀態
   useEffect(() => {
-    return () => { setMeditating(false); };
-  }, []);
+    setIsTuning(isMeditating);
+  }, [isMeditating]);
 
   // ── MapLibre 初始化（動態 import，避免手機 WebGL2 失敗崩潰）──────
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     let cancelled = false;
 
-    Promise.all([
-      import('maplibre-gl'),
-      import('maplibre-gl/dist/maplibre-gl.css'),
-    ]).then(([{ default: maplibregl }]) => {
+    import('maplibre-gl').then(({ default: maplibregl }) => {
       if (cancelled || !mapContainerRef.current) return;
 
       const map = new maplibregl.Map({
@@ -100,12 +117,8 @@ export default function ExploreView() {
         attributionControl: false,
       });
 
-      // filter 在 load 後再套：確保 canvas 已存在
       map.on('load', () => {
-        if (mapContainerRef.current) {
-          mapContainerRef.current.style.filter =
-            'grayscale(1) invert(1) brightness(0.5) contrast(1.2)';
-        }
+        // CartoDB Dark Matter 本身為深色底，不需額外 filter
       });
 
       map.on('error', (e) => {
@@ -201,22 +214,12 @@ export default function ExploreView() {
     setIsPressing(false);
 
     if (duration < 500) {
-      if (isMeditating) {
-        setIsTuning(false);
-        setMeditating(false);
-        setMessage('凝神聚氣，外放神識');
-        if (navigator.vibrate) navigator.vibrate(15);
-      } else {
-        handleScan();
-      }
+      if (!isMeditating) handleScan();
+      // 調息中短按由 PlayingStage 遮罩攔截，這裡不處理
     }
   };
 
   const openNodeModal = (clickedNode) => {
-    if (isMeditating) {
-      setMessage('定神調息中，無法進行互動');
-      return;
-    }
     // 戰鬥類節點（突襲 or 妖獸/戰鬥類型）直接進全螢幕戰鬥
     const isCombatType = clickedNode.isAmbush
       || clickedNode.nodeType === '妖獸'
@@ -290,7 +293,6 @@ export default function ExploreView() {
   // ── 掃描 ────────────────────────────────────────────────────────────
   const handleScan = () => {
     if (!player?.id)    { setMessage('尚未感知到道友的命格'); return; }
-    if (isMeditating)   { setMessage('定神調息中，無法外放神識'); return; }
     if (player.ep < 10) {
       setMessage('精力不足，無法外放神識');
       if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
@@ -454,6 +456,7 @@ export default function ExploreView() {
       <div
         ref={mapContainerRef}
         className="absolute inset-0 z-0 pointer-events-none"
+        style={{ width: '100%', height: '100%' }}
       />
 
       {/* 1. 危險等級氣氛光暈（疊在地圖上） */}
@@ -517,10 +520,11 @@ export default function ExploreView() {
         );
       })}
 
-      {/* 4. 中央探靈陣盤與波紋動畫 */}
+      {/* 4. 中央玩家靈球（絕對置中） */}
       <div
-        className={`relative flex flex-col items-center justify-center cursor-pointer transition-transform duration-500 z-30
-          ${isScanning ? 'scale-110' : isPressing ? 'scale-90' : isTuning ? 'scale-100' : 'hover:scale-105 active:scale-95'}`}
+        className={`absolute z-30 cursor-pointer transition-transform duration-500
+          ${isScanning ? 'scale-110' : isPressing ? 'scale-90' : isTuning ? 'scale-100' : 'active:scale-95'}`}
+        style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
@@ -529,39 +533,41 @@ export default function ExploreView() {
         {/* 探測時：向外擴散的青色波紋 */}
         {isScanning && (
           <>
-            <div className="absolute w-[80px] h-[80px] rounded-full border-[1.5px] border-[#00E5FF] animate-[ripple-out_2s_infinite_ease-out]" style={{ animationDelay: '0s' }} />
-            <div className="absolute w-[80px] h-[80px] rounded-full border-[1.5px] border-[#00E5FF] animate-[ripple-out_2s_infinite_ease-out]" style={{ animationDelay: '0.6s' }} />
-            <div className="absolute w-[80px] h-[80px] rounded-full border-[1.5px] border-[#00E5FF] animate-[ripple-out_2s_infinite_ease-out]" style={{ animationDelay: '1.2s' }} />
+            <div className="absolute rounded-full border border-[#00E5FF]/60 animate-[ripple-out_2s_infinite_ease-out]" style={{ inset: '-4px', animationDelay: '0s' }} />
+            <div className="absolute rounded-full border border-[#00E5FF]/40 animate-[ripple-out_2s_infinite_ease-out]" style={{ inset: '-4px', animationDelay: '0.7s' }} />
+            <div className="absolute rounded-full border border-[#00E5FF]/20 animate-[ripple-out_2s_infinite_ease-out]" style={{ inset: '-4px', animationDelay: '1.4s' }} />
           </>
         )}
 
         {/* 長按調息時：向內聚攏的金色波紋 */}
         {(isPressing || isTuning) && (
           <>
-            <div className="absolute w-[80px] h-[80px] rounded-full border-[2px] border-[#FFD700] animate-[ripple-in_1.5s_infinite_ease-in]" style={{ animationDelay: '0s' }} />
-            <div className="absolute w-[80px] h-[80px] rounded-full border-[2px] border-[#FFD700] animate-[ripple-in_1.5s_infinite_ease-in]" style={{ animationDelay: '0.5s' }} />
-            <div className="absolute w-[80px] h-[80px] rounded-full border-[2px] border-[#FFD700] animate-[ripple-in_1.5s_infinite_ease-in]" style={{ animationDelay: '1.0s' }} />
+            <div className="absolute rounded-full border border-[#FFD700]/60 animate-[ripple-in_1.5s_infinite_ease-in]" style={{ inset: '-4px', animationDelay: '0s' }} />
+            <div className="absolute rounded-full border border-[#FFD700]/40 animate-[ripple-in_1.5s_infinite_ease-in]" style={{ inset: '-4px', animationDelay: '0.5s' }} />
+            <div className="absolute rounded-full border border-[#FFD700]/20 animate-[ripple-in_1.5s_infinite_ease-in]" style={{ inset: '-4px', animationDelay: '1.0s' }} />
           </>
         )}
 
+        {/* 靈球本體 */}
         <div
-          className={`w-[80px] h-[80px] rounded-full flex flex-col items-center justify-center transition-all duration-1000
-            ${isScanning
-              ? 'shadow-[0_0_50px_rgba(0,229,255,0.8)] bg-[#00E5FF]/30 backdrop-blur-md'
-              : (isPressing || isTuning)
-                ? 'shadow-[0_0_50px_rgba(255,215,0,0.8)] bg-[#FFD700]/30 backdrop-blur-md'
-                : 'shadow-[0_0_20px_rgba(0,229,255,0.15)] bg-[#0A0C10]/80 backdrop-blur-sm'
-            }`}
+          className="relative w-[52px] h-[52px] rounded-full flex items-center justify-center transition-all duration-700"
+          style={isScanning ? {
+            background: 'radial-gradient(circle at 35% 35%, rgba(180,240,255,0.9), rgba(0,229,255,0.5) 50%, rgba(0,100,160,0.3))',
+            boxShadow: '0 0 20px rgba(0,229,255,0.9), 0 0 50px rgba(0,229,255,0.5), 0 0 90px rgba(0,229,255,0.2)',
+          } : (isPressing || isTuning) ? {
+            background: 'radial-gradient(circle at 35% 35%, rgba(255,240,160,0.9), rgba(255,215,0,0.5) 50%, rgba(160,100,0,0.3))',
+            boxShadow: '0 0 20px rgba(255,215,0,0.9), 0 0 50px rgba(255,215,0,0.5), 0 0 90px rgba(255,215,0,0.2)',
+          } : {
+            background: 'radial-gradient(circle at 35% 35%, rgba(180,240,255,0.7), rgba(0,200,220,0.35) 50%, rgba(0,60,100,0.2))',
+            boxShadow: '0 0 12px rgba(0,229,255,0.6), 0 0 30px rgba(0,229,255,0.25)',
+          }}
         >
+          {/* 內部高光點 */}
+          <div className="absolute top-[18%] left-[22%] w-[28%] h-[18%] rounded-full bg-white/60 blur-[2px]" />
+          {/* 靈氣旋紋（細環） */}
           <div
-            className={`w-[40px] h-[40px] border-[2px] rounded-sm transition-all duration-500
-              ${isScanning
-                ? 'border-white animate-[spin_1s_linear_infinite]'
-                : (isPressing || isTuning)
-                  ? 'border-white animate-[spin_0.5s_linear_infinite_reverse] scale-75'
-                  : 'border-[#00E5FF] opacity-80 animate-[spin_4s_linear_infinite]'
-              }`}
-            style={(!isScanning && !isPressing && !isTuning) ? { transform: 'rotate(45deg)' } : {}}
+            className="absolute inset-[6px] rounded-full border border-white/20 animate-[spin_8s_linear_infinite]"
+            style={{ borderStyle: 'dashed' }}
           />
         </div>
       </div>
@@ -574,10 +580,10 @@ export default function ExploreView() {
       {/* 6. 互動彈出視窗 */}
       {activeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-          <div className="bg-[#12141A] border border-[#00E5FF]/30 rounded-xl w-full max-w-[320px] shadow-[0_0_40px_rgba(0,229,255,0.15)] flex flex-col overflow-hidden text-center transform transition-all">
+          <div className="bg-[#12141A] border border-[#00E5FF]/30 rounded-2xl w-full max-w-[360px] shadow-[0_0_40px_rgba(0,229,255,0.15)] flex flex-col overflow-hidden text-center transform transition-all">
             <div className="h-1 w-full bg-gradient-to-r from-transparent via-[#00E5FF] to-transparent opacity-50" />
 
-            <div className="p-6">
+            <div className="p-7">
               {activeModal.step === 'info' && (() => {
                 const nd = activeModal.node;
                 const isSpring  = nd.nodeType === '靈泉';
@@ -585,36 +591,36 @@ export default function ExploreView() {
                 const accentColor = isSpring ? '#00E5FF' : isPlayer ? '#C084FC' : '#00E5FF';
                 return (
                   <>
-                    <h3 className="text-xl mb-2 font-bold tracking-widest" style={{ color: accentColor }}>
+                    <h3 className="text-2xl mb-3 font-bold tracking-widest" style={{ color: accentColor }}>
                       {isPlayer ? `道友：${nd.name}` : nd.name}
                     </h3>
-                    <p className="text-gray-400 text-sm mb-4 min-h-[40px] leading-relaxed">
+                    <p className="text-gray-300 text-base mb-5 min-h-[44px] leading-relaxed tracking-wider">
                       {nd.description || '此地似乎隱藏著某種機緣...'}
                     </p>
 
                     {isSpring && (
-                      <div className="bg-black/40 rounded p-3 mb-4 border border-[#00E5FF]/20">
-                        <p className="text-[#00E5FF] text-xs tracking-widest">靈氣 +{nd.aura_amount}</p>
+                      <div className="bg-black/40 rounded-lg p-4 mb-5 border border-[#00E5FF]/20">
+                        <p className="text-[#00E5FF] text-base tracking-widest">靈氣 +{nd.aura_amount}</p>
                       </div>
                     )}
 
                     {isPlayer && (
-                      <div className="bg-black/40 rounded p-3 mb-4 border border-[#C084FC]/20 space-y-1">
-                        <p className="text-[#C084FC] text-xs tracking-widest">切磋：贏得聲望（對方等級 ≥ 自己才加）</p>
-                        <p className="text-[#FF9500] text-xs tracking-widest">掠奪：贏得煞氣 +30 及素材，輸則掉落素材</p>
+                      <div className="bg-black/40 rounded-lg p-4 mb-5 border border-[#C084FC]/20 space-y-2">
+                        <p className="text-[#C084FC] text-sm tracking-wider">切磋：贏得聲望（對方等級 ≥ 自己才加）</p>
+                        <p className="text-[#FF9500] text-sm tracking-wider">掠奪：贏得煞氣 +30 及素材，輸則掉落素材</p>
                       </div>
                     )}
 
                     {!isSpring && !isPlayer && (
-                      <div className="bg-black/40 rounded p-3 mb-4 border border-white/5">
-                        <p className="text-[#FF3B30] text-xs tracking-widest">
-                          預計消耗: {nd.cost?.sp || 0} 體力
+                      <div className="bg-black/40 rounded-lg p-4 mb-5 border border-white/5">
+                        <p className="text-[#FF3B30] text-sm tracking-widest">
+                          預計消耗：{nd.cost?.sp || 0} 體力
                         </p>
                       </div>
                     )}
 
                     <div className="flex gap-3">
-                      <button onClick={closeModal} className="flex-1 py-2 rounded border border-white/20 text-gray-400 text-sm tracking-widest hover:bg-white/5 active:scale-95 transition-all">
+                      <button onClick={closeModal} className="flex-1 py-3 rounded-xl border border-white/20 text-gray-400 text-base tracking-widest hover:bg-white/5 active:scale-95 transition-all">
                         離去
                       </button>
                       {isPlayer ? (
@@ -631,7 +637,7 @@ export default function ExploreView() {
                                 onComplete: () => setEvents(prev => prev.filter(e => e.id !== node.id)),
                               });
                             }}
-                            className="flex-1 py-2 rounded bg-[#C084FC]/10 border border-[#C084FC]/50 text-[#C084FC] text-sm tracking-widest hover:bg-[#C084FC]/20 active:scale-95 transition-all"
+                            className="flex-1 py-3 rounded-xl bg-[#C084FC]/10 border border-[#C084FC]/50 text-[#C084FC] text-base tracking-widest hover:bg-[#C084FC]/20 active:scale-95 transition-all"
                           >切磋</button>
                           <button
                             onClick={() => {
@@ -645,11 +651,11 @@ export default function ExploreView() {
                                 onComplete: () => setEvents(prev => prev.filter(e => e.id !== node.id)),
                               });
                             }}
-                            className="flex-1 py-2 rounded bg-[#FF9500]/10 border border-[#FF9500]/50 text-[#FF9500] text-sm tracking-widest hover:bg-[#FF9500]/20 active:scale-95 transition-all"
+                            className="flex-1 py-3 rounded-xl bg-[#FF9500]/10 border border-[#FF9500]/50 text-[#FF9500] text-base tracking-widest hover:bg-[#FF9500]/20 active:scale-95 transition-all"
                           >掠奪</button>
                         </>
                       ) : (
-                        <button onClick={confirmExecuteNode} className="flex-1 py-2 rounded bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] text-sm tracking-widest hover:bg-[#00E5FF]/20 active:scale-95 transition-all">
+                        <button onClick={confirmExecuteNode} className="flex-1 py-3 rounded-xl bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] text-base tracking-widest hover:bg-[#00E5FF]/20 active:scale-95 transition-all">
                           {isSpring ? '汲取' : '探索'}
                         </button>
                       )}
@@ -660,8 +666,8 @@ export default function ExploreView() {
 
               {activeModal.step === 'loading' && (
                 <div className="py-8 flex flex-col items-center justify-center">
-                  <div className="w-8 h-8 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin mb-4" />
-                  <p className="text-[#00E5FF] text-sm tracking-widest animate-pulse">神識交匯中...</p>
+                  <div className="w-10 h-10 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin mb-5" />
+                  <p className="text-[#00E5FF] text-base tracking-widest animate-pulse">神識交匯中...</p>
                 </div>
               )}
 
@@ -669,15 +675,15 @@ export default function ExploreView() {
                 <>
                   {activeModal.battleLog ? (
                     <>
-                      <h3 className={`text-xl mb-3 font-bold tracking-widest ${activeModal.outcome === 'win' ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>
+                      <h3 className={`text-2xl mb-4 font-bold tracking-widest ${activeModal.outcome === 'win' ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>
                         {activeModal.outcome === 'win' ? '⚔ 勝利' : '💀 重傷'}
                       </h3>
-                      <div className="bg-black/60 border border-white/10 rounded-lg p-3 mb-4 max-h-[220px] overflow-y-auto text-left space-y-1 font-mono text-[11px] leading-relaxed">
+                      <div className="bg-black/60 border border-white/10 rounded-xl p-4 mb-4 max-h-[240px] overflow-y-auto text-left space-y-1.5 font-mono text-[13px] leading-relaxed">
                         {activeModal.battleLog.map((entry, i) => (
                           <p key={i} style={{ color: LOG_LINE_COLOR[entry.type] ?? '#9CA3AF' }}>{entry.text}</p>
                         ))}
                       </div>
-                      <div className="bg-black/40 rounded p-3 mb-4 border border-white/5 text-xs space-y-1">
+                      <div className="bg-black/40 rounded-xl p-4 mb-4 border border-white/5 text-sm space-y-2">
                         {activeModal.expGained > 0 && <p className="text-[#32D74B] tracking-widest">靈氣 +{activeModal.expGained}</p>}
                         {activeModal.itemDropped && <p className="text-[#FFD700] tracking-widest">獲得【{activeModal.itemDropped}】×1</p>}
                         {activeModal.prestigeDelta > 0 && <p className="text-[#C084FC] tracking-widest">聲望 +{activeModal.prestigeDelta}</p>}
@@ -689,11 +695,11 @@ export default function ExploreView() {
                     </>
                   ) : (
                     <>
-                      <h3 className="text-[#FFD700] text-xl mb-4 font-bold tracking-widest">探索結果</h3>
-                      <p className="text-white/90 text-sm mb-8 leading-relaxed">{activeModal.resultMessage}</p>
+                      <h3 className="text-[#FFD700] text-2xl mb-4 font-bold tracking-widest">探索結果</h3>
+                      <p className="text-white/90 text-base mb-8 leading-relaxed tracking-wider">{activeModal.resultMessage}</p>
                     </>
                   )}
-                  <button onClick={closeModal} className="w-full py-2 rounded bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] text-sm tracking-widest hover:bg-[#00E5FF]/20 active:scale-95 transition-all">
+                  <button onClick={closeModal} className="w-full py-3 rounded-xl bg-[#00E5FF]/10 border border-[#00E5FF]/50 text-[#00E5FF] text-base tracking-widest hover:bg-[#00E5FF]/20 active:scale-95 transition-all">
                     收下
                   </button>
                 </>
