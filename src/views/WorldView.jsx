@@ -55,16 +55,24 @@ function ReturnBar({ onClick, label = '收回神識' }) {
   );
 }
 
-export default function WorldView() {
-  const player  = useGameStore((s) => s.player);
-  const signOut = useGameStore((s) => s.signOut);
+// ── 教學坊市固定商品 ───────────────────────────────────────────
+const TUTORIAL_SWORD_PRICE = 50;
 
-  // viewState: 'overview' | 'sub' | 'list' | 'item-detail'
-  const [viewState,     setViewState]     = useState('overview');
-  const [activeTab,     setActiveTab]     = useState(null);
-  const [selectedItem,  setSelectedItem]  = useState(null);
-  const [confirmAction, setConfirmAction] = useState(null); // 'logout'|'reborn'|'delete'
-  const [confirmMsg,    setConfirmMsg]    = useState('');
+export default function WorldView() {
+  const player          = useGameStore((s) => s.player);
+  const signOut         = useGameStore((s) => s.signOut);
+  const isTutorial      = useGameStore((s) => s.isTutorial);
+  const tutorialStep    = useGameStore((s) => s.tutorialStep);
+  const advanceTutorial = useGameStore((s) => s.advanceTutorial);
+
+  // viewState: 'overview' | 'sub' | 'list' | 'item-detail' | 'tutorial-market'
+  const [viewState,        setViewState]        = useState('overview');
+  const [activeTab,        setActiveTab]        = useState(null);
+  const [selectedItem,     setSelectedItem]     = useState(null);
+  const [confirmAction,    setConfirmAction]    = useState(null); // 'logout'|'reborn'|'delete'
+  const [confirmMsg,       setConfirmMsg]       = useState('');
+  const [tutorialBuyMsg,   setTutorialBuyMsg]   = useState('');
+  const [tutorialBuying,   setTutorialBuying]   = useState(false);
 
   // 動態數據
   const [friends, setFriends] = useState(null);  // null=loading, []=empty
@@ -106,11 +114,49 @@ export default function WorldView() {
     setTimeout(() => setViewState('sub'), 400);
   };
 
+  // ── 教學坊市購買 ─────────────────────────────────────────────
+  const handleTutorialBuy = async () => {
+    if (!player?.id || tutorialBuying) return;
+    if ((player.silver ?? 0) < TUTORIAL_SWORD_PRICE) {
+      setTutorialBuyMsg('銀兩不足');
+      return;
+    }
+    setTutorialBuying(true);
+    setTutorialBuyMsg('');
+    try {
+      const res  = await fetch('/api/tutorial/buy-sword', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ playerId: player.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTutorialBuyMsg(data.message ?? '購買失敗');
+        setTutorialBuying(false);
+        return;
+      }
+      setTutorialBuyMsg('劍胚已入芥子，前往天地熔爐鑄煉！');
+      setTimeout(() => {
+        setViewState('overview');
+        setActiveTab(null);
+        advanceTutorial();
+      }, 1600);
+    } catch {
+      setTutorialBuyMsg('天地法則紊亂，請稍後再試');
+      setTutorialBuying(false);
+    }
+  };
+
   // ── 點擊子節點 ────────────────────────────────────────────────
   const handleSubNodeClick = (node) => {
     triggerHaptic([20, 30]);
     if (node.action) {
       setConfirmAction(node.action);
+      return;
+    }
+    // 教學步驟2：進入坊市官方珍寶時顯示教學商品
+    if (isTutorial && tutorialStep === 2 && node.id === 'store_official') {
+      setViewState('tutorial-market');
       return;
     }
     // 一般子節點 → 未來可進入詳情
@@ -431,6 +477,65 @@ export default function WorldView() {
           </div>
 
           <ReturnBar onClick={handleReturnList} label="返回" />
+        </div>
+      )}
+
+      {/* =====================================================================
+          教學坊市（步驟2 專用）：固定販售劍胚
+          ===================================================================== */}
+      {viewState === 'tutorial-market' && (
+        <div className="absolute inset-0 z-30 flex flex-col bg-[#07090F]">
+          {/* 頂部裝飾 */}
+          <div className="h-px w-full bg-gradient-to-r from-transparent via-[#FFD700]/50 to-transparent mt-[10cqw]" />
+          <div className="flex-1 flex flex-col items-center justify-center px-[8cqw] gap-6">
+            <p className="text-[#FFD700] tracking-[0.4em] text-[clamp(15px,4cqw,18px)]">官方珍寶</p>
+            <p className="text-white/40 tracking-widest text-xs">NPC 商人：鐵鑄老頭</p>
+
+            {/* 商品卡 */}
+            <div
+              className="w-full max-w-[280px] rounded-2xl border border-white/20 bg-white/5 p-5 flex flex-col gap-3"
+              style={{ boxShadow: '0 0 20px rgba(255,255,255,0.05)' }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                      <path d="M4 20v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2" /><line x1="12" y1="4" x2="12" y2="14" /><path d="M8 8l4-4 4 4" />
+                    </svg>
+                  </div>
+                <div>
+                  <p className="text-white tracking-widest text-sm">劍胚</p>
+                  <p className="text-white/40 text-xs tracking-wider mt-0.5">未完成的劍形素坯，需鑄煉</p>
+                </div>
+              </div>
+              <div className="h-px w-full bg-white/10" />
+              <div className="flex items-center justify-between">
+                <span className="text-[#FFD700] text-sm tracking-widest">
+                  {TUTORIAL_SWORD_PRICE} 銀兩
+                </span>
+                <span className="text-white/40 text-xs">
+                  持有：{player?.silver ?? 0} 銀
+                </span>
+              </div>
+            </div>
+
+            {/* 購買按鈕 */}
+            <button
+              onClick={handleTutorialBuy}
+              disabled={tutorialBuying || (player?.silver ?? 0) < TUTORIAL_SWORD_PRICE}
+              className="w-full max-w-[280px] py-4 rounded-2xl border border-[#FFD700]/50 bg-[#FFD700]/10 text-[#FFD700] tracking-[0.4em] text-sm active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {tutorialBuying ? '交易中...' : '購入'}
+            </button>
+
+            {tutorialBuyMsg && (
+              <p className={`text-sm tracking-widest text-center ${tutorialBuyMsg.includes('失敗') || tutorialBuyMsg.includes('不足') ? 'text-[#FF3B30]' : 'text-[#32D74B]'}`}>
+                {tutorialBuyMsg}
+              </p>
+            )}
+          </div>
+          <div className="h-px w-full bg-gradient-to-r from-transparent via-[#FFD700]/30 to-transparent mb-2" />
+
+          <ReturnBar onClick={() => { setViewState('sub'); setTutorialBuyMsg(''); }} label="返回坊市" />
         </div>
       )}
     </div>

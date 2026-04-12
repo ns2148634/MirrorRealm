@@ -19,6 +19,26 @@ const useGameStore = create((set, get) => ({
   introFinished:  false,     // 開場動畫是否播完
   isMeditating:   false,     // 定神調息狀態
 
+  // ── 新手教學狀態 ─────────────────────────────────────────────
+  // tutorialStep: 0=序幕+命名, 1=探索, 2=坊市, 3=熔爐, 4=配置, 5=戰鬥, 99=完成
+  tutorialStep:   0,
+  isTutorial:     false,
+
+  setTutorialStep: (step) => set({ tutorialStep: step }),
+  advanceTutorial: ()     => set((s) => ({ tutorialStep: s.tutorialStep + 1 })),
+  startTutorial:   ()     => set({ isTutorial: true, tutorialStep: 0 }),
+  completeTutorial: () => {
+    const player = get().player;
+    if (player?.id) {
+      fetch('/api/tutorial/complete', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ playerId: player.id }),
+      }).catch(console.error);
+    }
+    set({ isTutorial: false, tutorialStep: 99 });
+  },
+
   markIntroFinished: () => set({ introFinished: true }),
   setMeditating:    (v) => set({ isMeditating: v }),
 
@@ -49,12 +69,17 @@ const useGameStore = create((set, get) => ({
       const result = await res.json();
 
       if (result.isNew) {
-        // 尚未創角 → 進入命格凝聚畫面
+        // 尚未創角 → 進入命格凝聚畫面，同時啟動新手教學（序幕）
         set({ gameStage: 'naming', isLoading: false });
+        get().startTutorial();
       } else {
         // 已有角色 → 直接進入遊戲
         set({ player: result.player, gameStage: 'playing', isLoading: false });
         get().fetchGameConfigs();
+        // 若教學尚未完成，重新啟動（從步驟1開始，跳過序幕）
+        if (!result.player?.tutorial_completed) {
+          set({ isTutorial: true, tutorialStep: 1 });
+        }
       }
     } catch (err) {
       console.error('[store] syncPlayerWithBackend 失敗:', err);

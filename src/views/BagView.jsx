@@ -97,8 +97,11 @@ function transformInventory(apiItems) {
 // 主元件
 // ==========================================
 export default function BagView() {
-  const player    = useGameStore((s) => s.player);
-  const setPlayer = useGameStore((s) => s.setPlayer);
+  const player          = useGameStore((s) => s.player);
+  const setPlayer       = useGameStore((s) => s.setPlayer);
+  const isTutorial      = useGameStore((s) => s.isTutorial);
+  const tutorialStep    = useGameStore((s) => s.tutorialStep);
+  const advanceTutorial = useGameStore((s) => s.advanceTutorial);
 
   const [viewState,      setViewState]      = useState('overview');
   const [activeTab,      setActiveTab]      = useState('material');
@@ -149,6 +152,32 @@ export default function BagView() {
     if (!craftSlots.main || !player?.id) return;
     setCraftStep('crafting');
     const t0 = Date.now();
+
+    // ── 教學第3步：使用教學專用煉製端點，必定成功 ──────────────────
+    if (isTutorial && tutorialStep === 3) {
+      try {
+        const res  = await fetch('/api/tutorial/craft-sword', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ playerId: player.id }),
+        });
+        const json = await res.json();
+        const delay = Math.max(0, 1800 - (Date.now() - t0));
+        setTimeout(() => {
+          setCraftResult({ success: true, itemName: '鐵劍', message: '天地熔爐轟鳴——鐵劍鑄煉成功！' });
+          setCraftStep('result');
+          fetchInventory(player.id);
+          advanceTutorial();
+        }, delay);
+      } catch {
+        setTimeout(() => {
+          setCraftResult({ success: false, message: '天地法則紊亂，煉製中斷' });
+          setCraftStep('result');
+        }, 1800);
+      }
+      return;
+    }
+
     try {
       const res  = await fetch('/api/player/craft', {
         method:  'POST',
@@ -243,6 +272,10 @@ export default function BagView() {
         setEquipMessage(result.data.message);
         setPlayer({ attack: result.data.attack, defense: result.data.defense });
         if (navigator.vibrate) navigator.vibrate([30, 50, 100]);
+        // 教學第4步：裝備成功 → 前進步驟5
+        if (isTutorial && tutorialStep === 4) {
+          setTimeout(() => advanceTutorial(), 1000);
+        }
       }
     } catch {
       setEquipMessage('裝備失敗，天地法則紊亂');
@@ -294,10 +327,14 @@ export default function BagView() {
   const currentItems  = inventory[activeTab] ?? [];
   const displayGrid   = Array.from({ length: TOTAL_SLOTS }).map((_, i) => currentItems[i] ?? null);
 
-  const craftCalc = useMemo(
+  const craftCalcRaw = useMemo(
     () => calcSuccessRate(craftSlots.main, craftSlots.sub1, craftSlots.sub2, proficiency),
     [craftSlots, proficiency],
   );
+  // 教學步驟3：強制顯示 100% 成功率
+  const craftCalc = (isTutorial && tutorialStep === 3 && craftCalcRaw)
+    ? { ...craftCalcRaw, rate: 1.0 }
+    : craftCalcRaw;
 
   // 供選料 overlay 使用的完整物品清單
   const allItemsForPicker = useMemo(() => [

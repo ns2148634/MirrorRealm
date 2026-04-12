@@ -3,9 +3,10 @@ import { useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import useGameStore from './store/gameStore';
 
-import AuthScreen   from './views/AuthScreen';
-import PlayingStage from './components/PlayingStage';
-import CombatModal  from './components/CombatModal';
+import AuthScreen      from './views/AuthScreen';
+import PlayingStage    from './components/PlayingStage';
+import CombatModal     from './components/CombatModal';
+import TutorialOverlay from './components/TutorialOverlay';
 // ──────────────────────────────────────────────────────────────────────────────
 // 🌟 核心改動：在 App.jsx 中加入開場動畫防護鎖，確保星斗連線動畫一定會播完
 export default function App() {
@@ -72,6 +73,9 @@ export default function App() {
 
           {/* 全域戰鬥 Modal：任何頁面呼叫 triggerCombat 即可觸發 */}
           <CombatModal />
+
+          {/* 新手教學遮罩：z-index 最高，疊在所有畫面上方 */}
+          <TutorialOverlay />
         </div>
       </div>
     </>

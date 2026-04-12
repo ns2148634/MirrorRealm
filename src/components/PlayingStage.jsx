@@ -1,5 +1,5 @@
 // src/views/PlayingStage.jsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import useGameStore from '../store/gameStore';
 import ExploreView from '../views/ExploreView';
 import StatusView from '../views/StatusView';
@@ -9,15 +9,64 @@ import BagView from '../views/BagView';
 import WorldView from '../views/WorldView'; // 🌟 新增：引入大千世界陣法
 import StatOrbs from '../components/StatOrbs'; // 根據你的資料夾路徑調整
 
+// 頁籤順序（左右滑動依此排列）
+const TAB_ORDER = ['status', 'cultivate', 'explore', 'bag', 'network'];
+
+// 各教學步驟開放的頁籤（未列出的一律鎖定）
+const TUTORIAL_ALLOWED_TABS = {
+  1: ['explore'],
+  2: ['explore', 'network'],
+  3: ['explore', 'network', 'bag'],
+  4: ['explore', 'network', 'bag'],
+  5: ['explore'],
+};
+
 export default function PlayingStage() {
   const [currentMode, setCurrentMode] = useState('status');
   const [breakConfirm, setBreakConfirm] = useState(false); // 中斷調息確認框
   const player        = useGameStore((state) => state.player);
   const isMeditating  = useGameStore((state) => state.isMeditating);
   const setMeditating = useGameStore((state) => state.setMeditating);
+  const isTutorial    = useGameStore((state) => state.isTutorial);
+  const tutorialStep  = useGameStore((state) => state.tutorialStep);
 
   const triggerHaptic = () => {
     if (navigator.vibrate) navigator.vibrate(10);
+  };
+
+  // ── 左右滑動切換頁籤 ─────────────────────────────────────────
+  const swipeRef = useRef({ startX: 0, startY: 0, startTime: 0 });
+
+  const handleTouchStart = (e) => {
+    const t = e.touches[0];
+    swipeRef.current = { startX: t.clientX, startY: t.clientY, startTime: Date.now() };
+  };
+
+  const handleTouchEnd = (e) => {
+    if (isMeditating) return;                       // 調息中不換頁
+    const { startX, startY, startTime } = swipeRef.current;
+    const t  = e.changedTouches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    const dt = Date.now() - startTime;
+
+    if (dt > 450)                             return; // 太慢（垂直捲動）
+    if (Math.abs(dx) < 55)                    return; // 位移太短
+    if (Math.abs(dy) > Math.abs(dx) * 0.65)  return; // 方向太垂直
+
+    const idx     = TAB_ORDER.indexOf(currentMode);
+    const nextId  = dx < 0 ? TAB_ORDER[idx + 1] : TAB_ORDER[idx - 1];
+    if (!nextId) return;
+
+    // 教學鎖定檢查
+    const allowed = isTutorial ? (TUTORIAL_ALLOWED_TABS[tutorialStep] ?? []) : null;
+    if (allowed !== null && !allowed.includes(nextId)) {
+      if (navigator.vibrate) navigator.vibrate([30, 20, 30]);
+      return;
+    }
+
+    triggerHaptic();
+    setCurrentMode(nextId);
   };
 
   // 調息中點擊內容區 → 跳確認框
@@ -51,7 +100,11 @@ export default function PlayingStage() {
       {/* =========================================
           2. 中央主顯示區
           ========================================= */}
-      <div className="flex-grow relative z-10 overflow-hidden">
+      <div
+        className="flex-grow relative z-10 overflow-hidden"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {currentMode === 'status' && <StatusView />}
         {currentMode === 'cultivate' && <CultivateView />}
         {currentMode === 'explore' && <ExploreView />}
@@ -103,14 +156,24 @@ export default function PlayingStage() {
           { id: 'bag', label: '芥子', color: '#B8860B', glow: 'rgba(184,134,11,0.4)' },
           { id: 'network', label: '仙網', color: '#32D74B', glow: 'rgba(50,215,75,0.4)' }
         ].map((tab) => {
-          const isActive = currentMode === tab.id;
+          const isActive  = currentMode === tab.id;
+          const allowedList = isTutorial ? (TUTORIAL_ALLOWED_TABS[tutorialStep] ?? []) : null;
+          const isLocked  = allowedList !== null && !allowedList.includes(tab.id);
+
+          const handleTabClick = () => {
+            if (isLocked) {
+              // 簡短震動提示「尚未解鎖」
+              if (navigator.vibrate) navigator.vibrate([30, 20, 30]);
+              return;
+            }
+            triggerHaptic();
+            setCurrentMode(tab.id);
+          };
+
           return (
             <div
               key={tab.id}
-              onClick={() => {
-                triggerHaptic();
-                setCurrentMode(tab.id);
-              }}
+              onClick={handleTabClick}
               className="relative flex flex-col items-center justify-center cursor-pointer"
             >
               <div
@@ -125,10 +188,23 @@ export default function PlayingStage() {
                   alt={tab.label}
                   className="w-[60%] h-[60%] object-contain transition-all duration-500"
                   style={{
-                    opacity: isActive ? 1 : 0.4,
+                    opacity: isLocked ? 0.15 : (isActive ? 1 : 0.4),
                     filter: isActive ? `drop-shadow(0 0 8px ${tab.color}) drop-shadow(0 0 15px ${tab.color})` : 'none',
                   }}
                 />
+                {/* 教學鎖定圖示 */}
+                {isLocked && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <svg
+                      viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      style={{ width: '40%', height: '40%', color: 'rgba(255,255,255,0.35)' }}
+                    >
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  </div>
+                )}
               </div>
               {isActive && (
                 <div

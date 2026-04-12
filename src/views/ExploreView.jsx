@@ -71,12 +71,41 @@ const MAP_STYLE = {
 };
 
 
+// ── 教學第1步：固定 mock 節點 ─────────────────────────────────
+const TUTORIAL_MOCK_NODES = [
+  {
+    id:          'tut-node-1',
+    name:        '破銅爛鐵',
+    description: '廢棄的金屬碎片，散發微弱靈氣，可用於鑄煉法器。',
+    nodeType:    '拾荒',
+    cost:        { sp: 5, hp: 0 },
+    isAmbush:    false,
+    top:         '38%',
+    left:        '42%',
+    ...NODE_TYPE_MAPPING['拾荒'],
+  },
+  {
+    id:          'tut-node-2',
+    name:        '散碎銀兩',
+    description: '遺落在地的零散銀錢，雖不多，但聊勝於無。',
+    nodeType:    '拾荒',
+    cost:        { sp: 3, hp: 0 },
+    isAmbush:    false,
+    top:         '62%',
+    left:        '60%',
+    ...NODE_TYPE_MAPPING['拾荒'],
+  },
+];
+
 export default function ExploreView() {
-  const player        = useGameStore((state) => state.player);
-  const reduceEp      = useGameStore((state) => state.reduceEp);
-  const isMeditating  = useGameStore((state) => state.isMeditating);
-  const setMeditating = useGameStore((state) => state.setMeditating);
-  const triggerCombat = useGameStore((state) => state.triggerCombat);
+  const player          = useGameStore((state) => state.player);
+  const reduceEp        = useGameStore((state) => state.reduceEp);
+  const isMeditating    = useGameStore((state) => state.isMeditating);
+  const setMeditating   = useGameStore((state) => state.setMeditating);
+  const triggerCombat   = useGameStore((state) => state.triggerCombat);
+  const isTutorial      = useGameStore((state) => state.isTutorial);
+  const tutorialStep    = useGameStore((state) => state.tutorialStep);
+  const advanceTutorial = useGameStore((state) => state.advanceTutorial);
 
   const [isScanning, setIsScanning] = useState(false);
   const [isTuning,   setIsTuning]   = useState(false);
@@ -293,6 +322,30 @@ export default function ExploreView() {
   // ── 掃描 ────────────────────────────────────────────────────────────
   const handleScan = () => {
     if (!player?.id)    { setMessage('尚未感知到道友的命格'); return; }
+
+    // ── 教學第1步：略過 EP 消耗與 GPS，直接回傳固定節點 ──────────
+    if (isTutorial && tutorialStep === 1) {
+      setIsScanning(true);
+      setEvents([]);
+      setBreadcrumbs([]);
+      setMessage('神識初展，感應到靈氣波動...');
+      setTimeout(() => {
+        setEvents(TUTORIAL_MOCK_NODES);
+        setZoneTier('safe');
+        setMessage('探尋完畢，發現 2 處靈力波動');
+        setIsScanning(false);
+        // 呼叫後端初始化教學道具（破銅爛鐵加入背包）
+        fetch('/api/tutorial/setup', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ playerId: player.id }),
+        }).catch(console.error);
+        // 步驟1完成 → 前進步驟2
+        advanceTutorial();
+      }, 1800);
+      return;
+    }
+
     if (player.ep < 10) {
       setMessage('精力不足，無法外放神識');
       if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
