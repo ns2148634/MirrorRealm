@@ -108,26 +108,30 @@ export default function TutorialOverlay() {
 
     const showLine = (idx) => {
       if (idx >= PROLOGUE_LINES.length) {
-        // 全部播完 → 黑屏 2 秒 → 命名
+        // 全部播完 → 淡出最後一行 → 切黑屏（dark→naming 交由下方獨立 effect 處理）
         setLineFade('out');
-        timerRef.current = setTimeout(() => {
-          setProloguePhase('dark');
-          timerRef.current = setTimeout(() => setProloguePhase('naming'), 2000);
-        }, 600);
+        timerRef.current = setTimeout(() => setProloguePhase('dark'), 600);
         return;
       }
       setLineIdx(idx);
       setLineFade('in');
-      // 淡入 0.6s → 停留 0.9s → 淡出 0.6s → 下一行
+      // 淡入 0.6s → 停留 1.9s → 淡出 0.6s → 下一行
       timerRef.current = setTimeout(() => {
         setLineFade('out');
         timerRef.current = setTimeout(() => showLine(idx + 1), 600);
-      }, 1500);
+      }, 2500);
     };
 
     timerRef.current = setTimeout(() => showLine(0), 500);
     return clearTimer;
   }, [isTutorial, tutorialStep, prologuePhase]);
+
+  // ── 黑屏 2 秒後進入命名表單（獨立 effect 避免被上方 cleanup 取消）──
+  useEffect(() => {
+    if (prologuePhase !== 'dark') return;
+    const t = setTimeout(() => setProloguePhase('naming'), 2000);
+    return () => clearTimeout(t);
+  }, [prologuePhase]);
 
   // ── Step 5 演出 ────────────────────────────────────────────────
   useEffect(() => {

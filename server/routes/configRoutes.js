@@ -23,8 +23,14 @@ router.get('/realms', async (req, res) => {
     try {
         if (!cachedRealms) {
             const result = await db.query(
-                `SELECT level, name, required_aura,
-                        bonus_max_hp, bonus_max_sp, bonus_attack, bonus_defense
+                `SELECT level, realm_stage, realm_name,
+                        aura_required,
+                        bonus_max_hp, bonus_max_sp, bonus_max_mp, bonus_god_sense,
+                        mp_cap, god_sense_cap,
+                        success_rate, success_rate_cap,
+                        fail_aura_loss_pct, fail_drop_to_level,
+                        pseudo_risk_pct,
+                        required_item_type, required_item_qty
                  FROM realm_templates
                  ORDER BY level ASC`
             );

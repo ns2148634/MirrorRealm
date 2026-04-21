@@ -125,11 +125,14 @@ export default function StatusView() {
       if (!res.ok) {
         setBreakMessage(result.message);
       } else {
-        if (navigator.vibrate) navigator.vibrate([100, 50, 200, 50, 300]);
-        setShowFlash(true);
-        setTimeout(() => setShowFlash(false), 800);
-        setBreakMessage(result.data.message);
-        setPlayer(result.data);
+        const data = result.data;
+        setBreakMessage(data.message);
+        setPlayer((prev) => ({ ...prev, ...data }));
+        if (data.outcome === 'success') {
+          if (navigator.vibrate) navigator.vibrate([100, 50, 200, 50, 300]);
+          setShowFlash(true);
+          setTimeout(() => setShowFlash(false), 800);
+        }
       }
     } catch {
       setBreakMessage('突破失敗，天地靈氣紊亂');

@@ -182,8 +182,10 @@ export async function useItem(playerId, itemId) {
 // ── 境界突破 ─────────────────────────────────────────────────────
 export async function breakthrough(playerId) {
     const playerResult = await db.query(
-        `SELECT realm_level, aura, max_aura, hp, max_hp, sp, max_sp,
-                ep, max_ep, attack, defense, last_sync_time
+        `SELECT realm_level, aura, max_aura,
+                hp, max_hp, sp, max_sp, ep, max_ep,
+                mp, max_mp, god_sense, max_god_sense,
+                attack, defense, last_sync_time
          FROM players WHERE id = $1`,
         [playerId]
     );
@@ -192,62 +194,185 @@ export async function breakthrough(playerId) {
 
     const nextLevel = player.realm_level + 1;
     const templateResult = await db.query(
-        `SELECT * FROM realm_templates WHERE level = $1`,
+        `SELECT level, realm_name,
+                bonus_max_hp, bonus_max_sp, bonus_max_mp, bonus_god_sense,
+                mp_cap, god_sense_cap,
+                success_rate, success_rate_cap,
+                fail_aura_loss_pct, fail_drop_to_level,
+                required_item_type, required_item_qty
+         FROM realm_templates WHERE level = $1`,
         [nextLevel]
     );
     if (templateResult.rows.length === 0) {
         throw new Error('已達此界巔峰，天道極限難以逾越');
     }
-    const nextRealm = templateResult.rows[0];
+    const t = templateResult.rows[0];
 
+    // 預先查下下層的 aura_required，突破成功後設為新的 max_aura
+    const nextNextResult = await db.query(
+        `SELECT aura_required FROM realm_templates WHERE level = $1`,
+        [nextLevel + 1]
+    );
+    const newMaxAura = nextNextResult.rows[0]?.aura_required ?? null;
+
+    // 周天靈氣圓滿檢查
     if (player.aura < (player.max_aura ?? 120)) {
         const gap = (player.max_aura ?? 120) - player.aura;
         throw new Error(`周天靈氣尚未圓滿，強行突破恐會走火入魔（還差 ${gap} 點）`);
     }
 
+    // 所需道具檢查
+    if (t.required_item_type && t.required_item_qty > 0) {
+        const invResult = await db.query(
+            `SELECT pi.quantity
+             FROM player_inventory pi
+             JOIN items i ON i.id = pi.item_id
+             WHERE pi.player_id = $1 AND i.name = $2`,
+            [playerId, t.required_item_type]
+        );
+        const held = invResult.rows[0]?.quantity ?? 0;
+        if (held < t.required_item_qty) {
+            throw new Error(`突破需要【${t.required_item_type}】×${t.required_item_qty}，目前僅持有 ${held} 個`);
+        }
+    }
+
+    // 突破機率判定
+    const roll    = Math.random() * 100;
+    const rate    = Math.min(t.success_rate ?? 100, t.success_rate_cap ?? 100);
+    const success = roll < rate;
+
     // flush 離線 delta
     const now        = new Date();
     const afterDelta = calculateOfflineDelta(player, now);
-
-    const newMaxHp   = (player.max_hp   ?? 100) + (nextRealm.bonus_max_hp  ?? 0);
-    const newMaxSp   = (player.max_sp   ?? 100) + (nextRealm.bonus_max_sp  ?? 0);
-    const newAttack  = (player.attack   ?? 10)  + (nextRealm.bonus_attack  ?? 0);
-    const newDefense = (player.defense  ?? 5)   + (nextRealm.bonus_defense ?? 0);
 
     const client = await db.getClient();
     try {
         await client.query('BEGIN');
 
-        await client.query(
-            `UPDATE players
-             SET realm_level    = $1,
-                 max_hp         = $2,
-                 max_sp         = $3,
-                 hp             = $2,
-                 sp             = $3,
-                 ep             = $4,
-                 attack         = $5,
-                 defense        = $6,
-                 aura           = 0,
-                 last_sync_time = $7
-             WHERE id = $8`,
-            [nextLevel, newMaxHp, newMaxSp, afterDelta.ep, newAttack, newDefense, now, playerId]
-        );
+        // ── 消耗道具（無論成敗皆消耗）────────────────────────────
+        if (t.required_item_type && t.required_item_qty > 0) {
+            await client.query(
+                `UPDATE player_inventory pi
+                 SET quantity = quantity - $1
+                 FROM items i
+                 WHERE pi.item_id = i.id
+                   AND pi.player_id = $2
+                   AND i.name = $3`,
+                [t.required_item_qty, playerId, t.required_item_type]
+            );
+            // 清除數量歸零的欄位
+            await client.query(
+                `DELETE FROM player_inventory pi
+                 USING items i
+                 WHERE pi.item_id = i.id
+                   AND pi.player_id = $1
+                   AND i.name = $2
+                   AND pi.quantity <= 0`,
+                [playerId, t.required_item_type]
+            );
+        }
 
-        await client.query('COMMIT');
+        if (success) {
+            // ── 突破成功 ─────────────────────────────────────────
+            const newMaxHp  = (player.max_hp  ?? 100) + (t.bonus_max_hp  ?? 0);
+            const newMaxSp  = (player.max_sp  ?? 100) + (t.bonus_max_sp  ?? 0);
+            // mp_cap 是本層的絕對上限，直接採用；否則累加 bonus
+            const newMaxMp  = t.mp_cap != null
+                ? t.mp_cap
+                : (player.max_mp ?? 0) + (t.bonus_max_mp ?? 0);
+            // god_sense_cap 為大境界上限；bonus 累加後不超過上限
+            const newMaxGs  = t.god_sense_cap != null
+                ? Math.min((player.max_god_sense ?? 100) + (t.bonus_god_sense ?? 0), t.god_sense_cap)
+                : (player.max_god_sense ?? 100) + (t.bonus_god_sense ?? 0);
 
-        return {
-            message:     `轟隆！天地靈氣灌注全身，你成功突破至【${nextRealm.name}】！`,
-            realm_level: nextLevel,
-            max_hp:      newMaxHp,
-            max_sp:      newMaxSp,
-            hp:          newMaxHp,
-            sp:          newMaxSp,
-            ep:          afterDelta.ep,
-            attack:      newAttack,
-            defense:     newDefense,
-            aura:        0,
-        };
+            // max_aura：更新為下一層需要的靈氣量；頂層無下下層時維持原值
+            const finalMaxAura = newMaxAura ?? player.max_aura;
+
+            await client.query(
+                `UPDATE players
+                 SET realm_level    = $1,
+                     max_hp         = $2,  hp         = $2,
+                     max_sp         = $3,  sp         = $3,
+                     max_mp         = $4,  mp         = LEAST(mp, $4),
+                     max_god_sense  = $5,
+                     ep             = $6,
+                     aura           = 0,
+                     max_aura       = $7,
+                     last_sync_time = $8
+                 WHERE id = $9`,
+                [nextLevel, newMaxHp, newMaxSp, newMaxMp, newMaxGs,
+                 afterDelta.ep, finalMaxAura, now, playerId]
+            );
+
+            await client.query('COMMIT');
+            return {
+                outcome:       'success',
+                message:       `轟隆！天地靈氣灌注全身，你成功突破至【${t.realm_name}】！`,
+                realm_level:   nextLevel,
+                realm_name:    t.realm_name,
+                max_hp:        newMaxHp,  hp:        newMaxHp,
+                max_sp:        newMaxSp,  sp:        newMaxSp,
+                max_mp:        newMaxMp,
+                max_god_sense: newMaxGs,
+                max_aura:      finalMaxAura,
+                ep:            afterDelta.ep,
+                aura:          0,
+            };
+
+        } else {
+            // ── 突破失敗 ─────────────────────────────────────────
+            const lossPct    = t.fail_aura_loss_pct ?? 0;
+            const auraLoss   = Math.floor((player.max_aura ?? 120) * lossPct / 100);
+            const newAura    = Math.max(0, (player.aura ?? 0) - auraLoss);
+            const dropLevel  = t.fail_drop_to_level;
+
+            let newRealmLevel = player.realm_level;
+            let dropMessage   = '';
+
+            if (dropLevel != null) {
+                // 需要從掉落目標境界重新取得屬性快照
+                const dropResult = await client.query(
+                    `SELECT realm_name FROM realm_templates WHERE level = $1`,
+                    [dropLevel]
+                );
+                const dropRealm = dropResult.rows[0];
+                newRealmLevel   = dropLevel;
+                dropMessage     = dropRealm
+                    ? `，修為跌回【${dropRealm.realm_name}】`
+                    : `，修為跌落至境界 ${dropLevel}`;
+
+                await client.query(
+                    `UPDATE players
+                     SET realm_level    = $1,
+                         aura           = $2,
+                         ep             = $3,
+                         last_sync_time = $4
+                     WHERE id = $5`,
+                    [newRealmLevel, newAura, afterDelta.ep, now, playerId]
+                );
+            } else {
+                // 不掉境界，只扣靈氣
+                await client.query(
+                    `UPDATE players
+                     SET aura           = $1,
+                         ep             = $2,
+                         last_sync_time = $3
+                     WHERE id = $4`,
+                    [newAura, afterDelta.ep, now, playerId]
+                );
+            }
+
+            await client.query('COMMIT');
+
+            const lossDesc = auraLoss > 0 ? `，失去 ${auraLoss} 點周天靈氣` : '';
+            return {
+                outcome:     'fail',
+                message:     `天劫降臨，突破失敗${lossDesc}${dropMessage}！`,
+                realm_level: newRealmLevel,
+                aura:        newAura,
+                ep:          afterDelta.ep,
+            };
+        }
     } catch (e) {
         await client.query('ROLLBACK');
         throw e;

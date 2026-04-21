@@ -187,7 +187,17 @@ export async function runCombat(playerId, stance = 'balanced', enemyOverride = n
         `SELECT e.*, i.name AS drop_item_name
          FROM enemies e
          LEFT JOIN items i ON e.drop_item_id = i.id
-         ORDER BY RANDOM() LIMIT 1`
+         WHERE e.realm_level BETWEEN $1 AND $2
+         ORDER BY RANDOM() LIMIT 1`,
+        [Math.max(1, playerRow.realm_level - 1), playerRow.realm_level + 1]
+    ).then(r => r.rows[0])
+      ?? await db.query(
+        `SELECT e.*, i.name AS drop_item_name
+         FROM enemies e
+         LEFT JOIN items i ON e.drop_item_id = i.id
+         ORDER BY ABS(e.realm_level - $1) ASC, RANDOM()
+         LIMIT 1`,
+        [playerRow.realm_level]
     ).then(r => r.rows[0]);
 
     if (!enemyRow) throw new Error('此地空無一物');
