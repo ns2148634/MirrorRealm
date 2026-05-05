@@ -14,8 +14,16 @@ export default function StatusView() {
 
   // ── 境界動態計算（依 realmTemplates）────────────────────────────
   const realmLevel   = player?.realm_level ?? 1;
-  // 凡人（realm_level=1）靈根尚未開啟，圖騰全為零
-  const rootValues   = realmLevel <= 1 ? [0, 0, 0, 0, 0] : [85, 40, 60, 95, 30];
+  // 凡人（realm_level=1）靈根尚未開啟，圖騰全為零；順序對應陣盤：金木水火土
+  const rootValues   = realmLevel <= 1
+    ? [0, 0, 0, 0, 0]
+    : [
+        player?.sr_metal ?? 0,
+        player?.sr_wood  ?? 0,
+        player?.sr_water ?? 0,
+        player?.sr_fire  ?? 0,
+        player?.sr_earth ?? 0,
+      ];
 
   // ── 陣盤動畫 ────────────────────────────────────────────────────
   useEffect(() => {
@@ -95,7 +103,7 @@ export default function StatusView() {
     };
     draw();
     return () => cancelAnimationFrame(animationId);
-  }, [rootValues[0]]); // realmLevel 改變時重新渲染雷達
+  }, [rootValues[0], rootValues[1], rootValues[2], rootValues[3], rootValues[4]]); // 靈根任一值變動時重繪
 
   if (!player) return null;
 
@@ -274,13 +282,13 @@ export default function StatusView() {
           <div className="flex justify-between items-end w-full">
             <span className="opacity-80 text-[clamp(15px,4.5cqw,18px)] tracking-[0.4em]">聲望</span>
             <span className="text-[14px] text-white/60 tracking-[0.3em] font-serif drop-shadow-sm">
-              {getGoodTitle(player.karma_good)}
+              {getGoodTitle(player.prestige)}
             </span>
           </div>
           <div className="flex justify-between items-end w-full">
             <span className="opacity-80 text-[clamp(15px,4.5cqw,18px)] tracking-[0.4em]">煞氣</span>
             <span className="text-[14px] text-white/60 tracking-[0.3em] font-serif drop-shadow-sm">
-              {getEvilTitle(player.karma_evil)}
+              {getEvilTitle(player.sha_qi)}
             </span>
           </div>
 

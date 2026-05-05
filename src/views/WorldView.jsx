@@ -63,7 +63,6 @@ export default function WorldView() {
   const signOut         = useGameStore((s) => s.signOut);
   const isTutorial      = useGameStore((s) => s.isTutorial);
   const tutorialStep    = useGameStore((s) => s.tutorialStep);
-  const advanceTutorial = useGameStore((s) => s.advanceTutorial);
 
   // viewState: 'overview' | 'sub' | 'list' | 'item-detail' | 'tutorial-market'
   const [viewState,        setViewState]        = useState('overview');
@@ -139,7 +138,6 @@ export default function WorldView() {
       setTimeout(() => {
         setViewState('overview');
         setActiveTab(null);
-        advanceTutorial();
       }, 1600);
     } catch {
       setTutorialBuyMsg('天地法則紊亂，請稍後再試');
