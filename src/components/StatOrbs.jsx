@@ -4,20 +4,16 @@ export default function StatOrbs({ player }) {
   const getPct = (val, max) => Math.min(100, Math.max(0, ((val || 0) / (max || 1)) * 100));
 
   const hpPct = getPct(player?.hp, player?.max_hp);
-  const spPct = getPct(player?.sp, player?.max_sp);
   const epPct = getPct(player?.ep, player?.max_ep);
 
   return (
     <div className="absolute top-[calc(env(safe-area-inset-top,10px)+2.5vh)] left-0 right-0 w-full flex justify-center items-start gap-[4cqw] z-50 pointer-events-none px-[4cqw]">
-      
+
       {/* 🔴 氣血 */}
       <SpiritualVein icon="health" val={player?.hp} max={player?.max_hp} pct={hpPct} color="#ef4444" shadow="rgba(239,68,68,0.6)" />
-      
+
       {/* 🔵 精力 */}
-      <SpiritualVein icon="energy" val={player?.sp} max={player?.max_sp} pct={spPct} color="#3b82f6" shadow="rgba(59,130,246,0.6)" />
-      
-      {/* 🟣 體力 */}
-      <SpiritualVein icon="stamina" val={player?.ep} max={player?.max_ep} pct={epPct} color="#a855f7" shadow="rgba(168,85,247,0.6)" />
+      <SpiritualVein icon="energy" val={player?.ep} max={player?.max_ep} pct={epPct} color="#3b82f6" shadow="rgba(59,130,246,0.6)" />
 
     </div>
   );

@@ -15,10 +15,6 @@ const TAB_ORDER = ['status', 'cultivate', 'explore', 'bag', 'network'];
 // 各教學步驟開放的頁籤（未列出的一律鎖定）
 const TUTORIAL_ALLOWED_TABS = {
   1: ['explore'],
-  2: ['explore', 'network'],
-  3: ['explore', 'network', 'bag'],
-  4: ['explore', 'network', 'bag'],
-  5: ['explore'],
 };
 
 export default function PlayingStage() {
@@ -127,7 +123,7 @@ export default function PlayingStage() {
               <div className="p-7">
                 <p className="text-[#FFD700] text-xl font-bold tracking-widest mb-2">定神調息中</p>
                 <p className="text-white/50 text-sm tracking-wider mb-7 leading-relaxed">
-                  中斷調息將停止體力・精力・氣血的加速回復
+                  中斷調息將停止精力・氣血的加速回復
                 </p>
                 <div className="flex gap-3">
                   <button

@@ -1,86 +1,46 @@
 // src/components/TutorialOverlay.jsx
 //
-// 新手教學全流程元件：
-//   Step 0  → 序幕動畫 + 輸入道號
-//   Step 1  → 探索高亮引導
-//   Step 2  → 坊市高亮引導
-//   Step 3  → 熔爐高亮引導
-//   Step 4  → 配置高亮引導
-//   Step 5  → 戰鬥演出 + 結尾 + completeTutorial()
+// 開場流程：
+//   Step 0  → 開場詩文動畫 + 輸入道號
+//   Step 1  → 探索按鈕高亮引導（按下後由 ExploreView 呼叫 completeTutorial）
 import React, { useState, useEffect, useRef } from 'react';
 import useGameStore from '../store/gameStore';
 
-// ── 序幕文字（Step 0）──────────────────────────────────────────
+// ── 開場詩文（Step 0）──────────────────────────────────────────
 const PROLOGUE_LINES = [
-  '靈紀三千年，妖魔亂世——',
-  '你祭出【混沌天羅陣】——妖獸受到重創！',
-  '十級大妖【混沌魔君】狂吼，靈壓席捲萬里！',
-  '你燃燒最後一絲壽元——',
-  '【混沌魔君】轟然倒下！',
-  '天地靈氣驟散，你感到魂體不穩......',
-  '三千年修為，化為虛無。',
-  '壽元將盡——',
+  '凡人一生，不過眼前之事。',
+  '你或許也曾如此認為。',
+  '直到某一刻——',
+  '你忽然察覺，天地之間，似有氣在流動。',
+  '有人終其一生不曾看見，',
+  '有人只需一念，便踏入另一個世界。',
+  '修行無門，萬法未明。',
+  '機緣、造化，皆藏於未知之中。',
+  '在這裡，沒有指引，沒有既定之路。',
+  '你唯一能做的，只有一件事：',
+  '探索。',
+  '——道，將在你的腳下展開。',
 ];
 
-// ── 步驟5 戰鬥演出文字 ────────────────────────────────────────
-const STEP5_INTRO = [
-  '你正準備離去——',
-  '一股煞氣驟然湧來！',
-  '【野狗靈 Lv.1】感應到你的神識，主動發起攻擊！',
-];
-const STEP5_OUTRO = [
-  '你盯著手中的靈氣碎片——',
-  '上輩子，這對你來說連塵埃都不如。',
-  '但這一世，一切從這裡開始。',
-];
-
-// ── 各步驟高亮目標（底部導航位置）──────────────────────────────
-// navPct = 按鈕中心在容器寬度的百分比（5 個等距按鈕）
+// ── 步驟1 高亮目標（探索按鈕，位於底部導航中央）──────────────
 // navOrder: 本命10% 造化28% 探索50% 芥子72% 仙網90%
 const STEP_CONFIG = {
   1: {
-    navPct:  50,
-    color:   '#00E5FF',
-    glow:    'rgba(0,229,255,0.5)',
-    label:   '探索',
-    text:    '你隱約感覺到周遭有靈氣波動——試著外放神識。',
-    hint:    '點擊探索，輕觸陣盤發動神識掃描',
-  },
-  2: {
-    navPct:  90,
-    color:   '#32D74B',
-    glow:    'rgba(50,215,75,0.5)',
-    label:   '仙網',
-    text:    '你需要一件趁手的兵器——前往坊市購買劍體。',
-    hint:    '進入仙網 → 坊市 → 官方珍寶',
-  },
-  3: {
-    navPct:  72,
-    color:   '#B8860B',
-    glow:    'rgba(184,134,11,0.5)',
-    label:   '芥子',
-    text:    '將破銅爛鐵與劍體投入天地熔爐，鑄造你的第一件法器。',
-    hint:    '進入芥子 → 天地熔爐，選材煉製',
-  },
-  4: {
-    navPct:  72,
-    color:   '#B8860B',
-    glow:    'rgba(184,134,11,0.5)',
-    label:   '芥子',
-    text:    '將鐵劍裝備上去——感受靈力流入兵器的感覺。',
-    hint:    '在芥子 → 法器頁面，選中鐵劍後裝備',
+    navPct: 50,
+    color:  '#00E5FF',
+    glow:   'rgba(0,229,255,0.5)',
+    text:   '道，將在你的腳下展開。',
+    hint:   '按下探索，踏出第一步',
   },
 };
 
 const GENDERS = ['男', '女', '保密'];
 
 export default function TutorialOverlay() {
-  const tutorialStep     = useGameStore((s) => s.tutorialStep);
-  const isTutorial       = useGameStore((s) => s.isTutorial);
-  const setTutorialStep  = useGameStore((s) => s.setTutorialStep);
-  const completeTutorial = useGameStore((s) => s.completeTutorial);
-  const createCharacter  = useGameStore((s) => s.createCharacter);
-  const triggerCombat    = useGameStore((s) => s.triggerCombat);
+  const tutorialStep      = useGameStore((s) => s.tutorialStep);
+  const isTutorial        = useGameStore((s) => s.isTutorial);
+  const setTutorialStep   = useGameStore((s) => s.setTutorialStep);
+  const createCharacter   = useGameStore((s) => s.createCharacter);
   const markIntroFinished = useGameStore((s) => s.markIntroFinished);
 
   // ── Step 0：序幕 ──────────────────────────────────────────────
@@ -94,12 +54,7 @@ export default function TutorialOverlay() {
   const [nameError,  setNameError]  = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  // ── Step 5：戰鬥演出 ─────────────────────────────────────────
-  const [step5Phase,   setStep5Phase]   = useState('intro');  // 'intro' | 'waiting' | 'outro' | 'done'
-  const [step5LineIdx, setStep5LineIdx] = useState(0);
-
   const timerRef = useRef(null);
-
   const clearTimer = () => { if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; } };
 
   // ── 序幕動畫（僅 step0 prologue 觸發一次）────────────────────
@@ -108,14 +63,12 @@ export default function TutorialOverlay() {
 
     const showLine = (idx) => {
       if (idx >= PROLOGUE_LINES.length) {
-        // 全部播完 → 淡出最後一行 → 切黑屏（dark→naming 交由下方獨立 effect 處理）
         setLineFade('out');
         timerRef.current = setTimeout(() => setProloguePhase('dark'), 600);
         return;
       }
       setLineIdx(idx);
       setLineFade('in');
-      // 淡入 0.6s → 停留 1.9s → 淡出 0.6s → 下一行
       timerRef.current = setTimeout(() => {
         setLineFade('out');
         timerRef.current = setTimeout(() => showLine(idx + 1), 600);
@@ -126,59 +79,17 @@ export default function TutorialOverlay() {
     return clearTimer;
   }, [isTutorial, tutorialStep, prologuePhase]);
 
-  // ── 黑屏 2 秒後進入命名表單（獨立 effect 避免被上方 cleanup 取消）──
+  // ── 黑屏 2 秒後進入命名表單 ──────────────────────────────────
   useEffect(() => {
     if (prologuePhase !== 'dark') return;
     const t = setTimeout(() => setProloguePhase('naming'), 2000);
     return () => clearTimeout(t);
   }, [prologuePhase]);
 
-  // ── Step 5 演出 ────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isTutorial || tutorialStep !== 5) return;
-
-    // 逐行顯示 intro 文字，結束後觸發戰鬥
-    const showIntroLine = (idx) => {
-      if (idx >= STEP5_INTRO.length) {
-        timerRef.current = setTimeout(() => {
-          setStep5Phase('waiting');
-          // 觸發戰鬥
-          triggerCombat({
-            source:      'tutorial',
-            nodeName:    '野狗靈',
-            enemyOverride: { name: '野狗靈', level: 1, hp: 30, attack: 5, defense: 2 },
-            onComplete:  () => {
-              setStep5Phase('outro');
-              setStep5LineIdx(0);
-            },
-          });
-        }, 800);
-        return;
-      }
-      setStep5LineIdx(idx);
-      timerRef.current = setTimeout(() => showIntroLine(idx + 1), 1600);
-    };
-
-    setStep5Phase('intro');
-    setStep5LineIdx(0);
-    timerRef.current = setTimeout(() => showIntroLine(0), 500);
-    return clearTimer;
-  }, [isTutorial, tutorialStep]);
-
-  // ── Step 5 outro：顯示完自動完成教學 ─────────────────────────
-  useEffect(() => {
-    if (step5Phase !== 'outro') return;
-    timerRef.current = setTimeout(() => {
-      setStep5Phase('done');
-      completeTutorial();
-    }, STEP5_OUTRO.length * 1600 + 1200);
-    return clearTimer;
-  }, [step5Phase, completeTutorial]);
-
   // ── 命名提交 ──────────────────────────────────────────────────
   const handleCreateCharacter = async () => {
     const trimmed = name.trim();
-    if (!trimmed)       { setNameError('請輸入道號'); return; }
+    if (!trimmed)            { setNameError('請輸入道號'); return; }
     if (trimmed.length > 10) { setNameError('道號不可超過十字'); return; }
 
     setIsCreating(true);
@@ -191,9 +102,7 @@ export default function TutorialOverlay() {
       return;
     }
 
-    // 標記開場完成（讓 App.jsx 從 AuthScreen 切換到 PlayingStage）
     markIntroFinished();
-    // 前進到步驟1（setup API 在 step1 掃描後由 ExploreView 呼叫）
     setTutorialStep(1);
   };
 
@@ -201,17 +110,13 @@ export default function TutorialOverlay() {
   if (!isTutorial) return null;
 
   // ═══════════════════════════════════════════════════════════════
-  // Step 0：序幕 + 命名
+  // Step 0：開場詩文 + 命名
   // ═══════════════════════════════════════════════════════════════
   if (tutorialStep === 0) {
-    // 黑屏過渡期
     if (prologuePhase === 'dark') {
-      return (
-        <div className="absolute inset-0 z-[200] bg-black" />
-      );
+      return <div className="absolute inset-0 z-[200] bg-black" />;
     }
 
-    // 命名表單
     if (prologuePhase === 'naming') {
       return (
         <div className="absolute inset-0 z-[200] bg-black flex flex-col items-center justify-center px-8">
@@ -220,7 +125,6 @@ export default function TutorialOverlay() {
             .tut-appear { animation: tut-fade-in 0.8s ease forwards; }
           `}</style>
 
-          {/* 裝飾線 */}
           <div className="w-full max-w-[300px] h-px bg-gradient-to-r from-transparent via-[#FFD700]/60 to-transparent mb-8 tut-appear" />
 
           <p className="text-[#FFD700] tracking-[0.4em] text-sm mb-2 tut-appear" style={{ animationDelay: '0.2s', opacity: 0 }}>
@@ -230,7 +134,6 @@ export default function TutorialOverlay() {
             定下你這一世的道號
           </p>
 
-          {/* 道號輸入 */}
           <div className="w-full max-w-[300px] tut-appear" style={{ animationDelay: '0.6s', opacity: 0 }}>
             <input
               type="text"
@@ -245,7 +148,6 @@ export default function TutorialOverlay() {
             )}
           </div>
 
-          {/* 性別選擇 */}
           <div className="flex gap-3 mt-8 tut-appear" style={{ animationDelay: '0.8s', opacity: 0 }}>
             {GENDERS.map((g) => (
               <button
@@ -262,7 +164,6 @@ export default function TutorialOverlay() {
             ))}
           </div>
 
-          {/* 確認按鈕 */}
           <button
             onClick={handleCreateCharacter}
             disabled={isCreating}
@@ -277,7 +178,7 @@ export default function TutorialOverlay() {
       );
     }
 
-    // 序幕播放
+    // 詩文播放
     return (
       <div className="absolute inset-0 z-[200] bg-black flex items-center justify-center px-10">
         <p
@@ -301,40 +202,7 @@ export default function TutorialOverlay() {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // Step 5：戰鬥演出
-  // ═══════════════════════════════════════════════════════════════
-  if (tutorialStep === 5) {
-    // 等待戰鬥中（CombatModal 已接管），不顯示遮罩
-    if (step5Phase === 'waiting') return null;
-    if (step5Phase === 'done')   return null;
-
-    const lines = step5Phase === 'outro' ? STEP5_OUTRO : STEP5_INTRO;
-
-    return (
-      <div className="absolute inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center px-10 gap-6">
-        {lines.slice(0, step5LineIdx + 1).map((line, i) => (
-          <p
-            key={i}
-            style={{
-              color: i === step5LineIdx ? '#E8E0D0' : '#E8E0D0',
-              opacity: i === step5LineIdx ? 1 : 0.5,
-              textAlign: 'center',
-              letterSpacing: '0.25em',
-              lineHeight: '1.8',
-              fontSize: 'clamp(14px, 3.8cqw, 17px)',
-              fontFamily: 'serif',
-              transition: 'opacity 0.5s ease',
-            }}
-          >
-            {line}
-          </p>
-        ))}
-      </div>
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // Step 1–4：高亮底部導航引導
+  // Step 1：高亮探索按鈕
   // ═══════════════════════════════════════════════════════════════
   const cfg = STEP_CONFIG[tutorialStep];
   if (!cfg) return null;
@@ -351,15 +219,11 @@ export default function TutorialOverlay() {
           from { opacity:0; transform:translateY(8px); }
           to   { opacity:1; transform:translateY(0); }
         }
-        .tut-spotlight {
-          animation: tut-pulse-ring 2s ease-out infinite;
-        }
-        .tut-text-appear {
-          animation: tut-text-in 0.5s ease forwards;
-        }
+        .tut-spotlight  { animation: tut-pulse-ring 2s ease-out infinite; }
+        .tut-text-appear { animation: tut-text-in 0.5s ease forwards; }
       `}</style>
 
-      {/* 聚光燈：定位在底部導航按鈕上 */}
+      {/* 聚光燈：定位在底部探索按鈕上 */}
       <div
         className="tut-spotlight absolute rounded-full"
         style={{
@@ -372,7 +236,7 @@ export default function TutorialOverlay() {
         }}
       />
 
-      {/* 步驟標題 */}
+      {/* 引導文字 */}
       <div
         className="tut-text-appear absolute"
         style={{
@@ -406,29 +270,6 @@ export default function TutorialOverlay() {
         >
           ↓ {cfg.hint}
         </p>
-      </div>
-
-      {/* 步驟進度圓點 */}
-      <div
-        className="absolute flex gap-2"
-        style={{
-          top:  'calc(env(safe-area-inset-top, 0px) + 16px)',
-          left: '50%',
-          transform: 'translateX(-50%)',
-        }}
-      >
-        {[1, 2, 3, 4].map((s) => (
-          <div
-            key={s}
-            style={{
-              width:  s === tutorialStep ? 20 : 6,
-              height: 6,
-              borderRadius: 3,
-              background: s === tutorialStep ? cfg.color : 'rgba(255,255,255,0.2)',
-              transition: 'all 0.3s ease',
-            }}
-          />
-        ))}
       </div>
     </div>
   );

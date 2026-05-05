@@ -105,7 +105,7 @@ export default function ExploreView() {
   const triggerCombat   = useGameStore((state) => state.triggerCombat);
   const isTutorial      = useGameStore((state) => state.isTutorial);
   const tutorialStep    = useGameStore((state) => state.tutorialStep);
-  const advanceTutorial = useGameStore((state) => state.advanceTutorial);
+  const completeTutorial = useGameStore((state) => state.completeTutorial);
 
   const [isScanning, setIsScanning] = useState(false);
   const [isTuning,   setIsTuning]   = useState(false);
@@ -229,7 +229,7 @@ export default function ExploreView() {
       if (navigator.vibrate) navigator.vibrate([50, 50, 150]);
       setIsTuning(true);
       setMeditating(true);
-      setMessage('凝神入定，體力・精力・氣血回復加速...');
+      setMessage('凝神入定，精力・氣血回復加速...');
     }, 3000);
   };
 
@@ -340,8 +340,8 @@ export default function ExploreView() {
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ playerId: player.id }),
         }).catch(console.error);
-        // 步驟1完成 → 前進步驟2
-        advanceTutorial();
+        // 完成教學
+        completeTutorial();
       }, 1800);
       return;
     }
@@ -664,10 +664,10 @@ export default function ExploreView() {
                       </div>
                     )}
 
-                    {!isSpring && !isPlayer && (
+                    {!isSpring && !isPlayer && nd.cost?.ep > 0 && (
                       <div className="bg-black/40 rounded-lg p-4 mb-5 border border-white/5">
                         <p className="text-[#FF3B30] text-sm tracking-widest">
-                          預計消耗：{nd.cost?.sp || 0} 體力
+                          預計消耗：{nd.cost.ep} 精力
                         </p>
                       </div>
                     )}
