@@ -2,6 +2,15 @@
 import * as db from '../config/db.js';
 import { calculateOfflineDelta } from '../lib/recovery.js';
 
+// 各大境界對應壽元上限（根據設計文件）
+const STAGE_MAX_AGE = {
+    '煉氣期': 120,
+    '築基期': 250,
+    '金丹期': 500,
+    '元嬰期': 1000,
+    '化神期': 2000,
+};
+
 export async function getBackpack(playerId) {
     const result = await db.query(
         `SELECT
@@ -32,7 +41,7 @@ export async function getBackpack(playerId) {
 //   真正的 DB flush 只發生在玩家「做了事」（調息、突破、探索）的 POST API 裡。
 export async function getPlayerStatus(playerId) {
     const result = await db.query(
-        `SELECT p.*, rt.name AS realm_name
+        `SELECT p.*, rt.realm_name, rt.realm_stage
          FROM players p
          LEFT JOIN realm_templates rt ON rt.level = p.realm_level
          WHERE p.id = $1`,
@@ -182,7 +191,7 @@ export async function useItem(playerId, itemId) {
 // ── 境界突破 ─────────────────────────────────────────────────────
 export async function breakthrough(playerId) {
     const playerResult = await db.query(
-        `SELECT realm_level, aura, max_aura,
+        `SELECT realm_level, aura, max_aura, max_age,
                 hp, max_hp, sp, max_sp, ep, max_ep,
                 mp, max_mp, god_sense, max_god_sense,
                 attack, defense, last_sync_time
@@ -194,7 +203,7 @@ export async function breakthrough(playerId) {
 
     const nextLevel = player.realm_level + 1;
     const templateResult = await db.query(
-        `SELECT level, realm_name,
+        `SELECT level, realm_stage, realm_name,
                 bonus_max_hp, bonus_max_sp, bonus_max_mp, bonus_god_sense,
                 mp_cap, god_sense_cap,
                 success_rate, success_rate_cap,
@@ -288,6 +297,12 @@ export async function breakthrough(playerId) {
             // max_aura：更新為下一層需要的靈氣量；頂層無下下層時維持原值
             const finalMaxAura = newMaxAura ?? player.max_aura;
 
+            // 跨大境界時更新壽元上限（凡人→煉氣=120, 築基=250, 金丹=500, 元嬰=1000, 化神=2000）
+            const stageMaxAge  = STAGE_MAX_AGE[t.realm_stage];
+            const finalMaxAge  = stageMaxAge != null
+                ? Math.max(player.max_age ?? 80, stageMaxAge)
+                : (player.max_age ?? 80);
+
             await client.query(
                 `UPDATE players
                  SET realm_level    = $1,
@@ -298,10 +313,11 @@ export async function breakthrough(playerId) {
                      ep             = $6,
                      aura           = 0,
                      max_aura       = $7,
-                     last_sync_time = $8
-                 WHERE id = $9`,
+                     max_age        = $8,
+                     last_sync_time = $9
+                 WHERE id = $10`,
                 [nextLevel, newMaxHp, newMaxSp, newMaxMp, newMaxGs,
-                 afterDelta.ep, finalMaxAura, now, playerId]
+                 afterDelta.ep, finalMaxAura, finalMaxAge, now, playerId]
             );
 
             await client.query('COMMIT');
@@ -310,11 +326,13 @@ export async function breakthrough(playerId) {
                 message:       `轟隆！天地靈氣灌注全身，你成功突破至【${t.realm_name}】！`,
                 realm_level:   nextLevel,
                 realm_name:    t.realm_name,
+                realm_stage:   t.realm_stage,
                 max_hp:        newMaxHp,  hp:        newMaxHp,
                 max_sp:        newMaxSp,  sp:        newMaxSp,
                 max_mp:        newMaxMp,
                 max_god_sense: newMaxGs,
                 max_aura:      finalMaxAura,
+                max_age:       finalMaxAge,
                 ep:            afterDelta.ep,
                 aura:          0,
             };
@@ -523,7 +541,8 @@ export async function getFriends(playerId) {
             `SELECT
                  p.id,
                  p.name,
-                 p.realm_name,
+                 rt.realm_name,
+                 rt.realm_stage,
                  p.realm_level,
                  f.created_at AS friends_since
              FROM friendships f
@@ -531,6 +550,7 @@ export async function getFriends(playerId) {
                  WHEN f.player_a_id = $1 THEN f.player_b_id
                  ELSE f.player_a_id
              END
+             LEFT JOIN realm_templates rt ON rt.level = p.realm_level
              WHERE (f.player_a_id = $1 OR f.player_b_id = $1)
                AND f.status = 'accepted'
              ORDER BY p.realm_level DESC, p.name`,
@@ -565,9 +585,10 @@ export async function getSect(playerId) {
 
         // 取宗門成員列表
         const members = await db.query(
-            `SELECT p.id, p.name, p.realm_name, p.realm_level, sm.role
+            `SELECT p.id, p.name, rt.realm_name, rt.realm_stage, p.realm_level, sm.role
              FROM sect_members sm
              JOIN players p ON p.id = sm.player_id
+             LEFT JOIN realm_templates rt ON rt.level = p.realm_level
              WHERE sm.sect_id = $1
              ORDER BY sm.role DESC, p.realm_level DESC`,
             [row.id]

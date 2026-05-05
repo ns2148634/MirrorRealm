@@ -99,15 +99,29 @@ export default function StatusView() {
 
   if (!player) return null;
 
-  const nextRealm = realmTemplates.find((r) => r.level === realmLevel + 1);
-  const realmName    = player.realm_name ?? `境界 ${realmLevel}`;
+  const nextRealm    = realmTemplates.find((r) => r.level === realmLevel + 1);
+  const currentRealm = realmTemplates.find((r) => r.level === realmLevel);
+  const realmName    = player.realm_name  ?? currentRealm?.realm_name  ?? `境界 ${realmLevel}`;
+  const realmStage   = player.realm_stage ?? currentRealm?.realm_stage ?? '';
   const aura    = player.aura     ?? 0;
   const maxAura = player.max_aura ?? 120;
+  const age     = player.age      ?? 0;
+  const maxAge  = player.max_age  ?? 80;
 
   // 突破條件：需有下一境界，且周天靈氣達到上限
   const canBreak   = !!nextRealm && aura >= maxAura;
   // 已到頂：模板已載入且確實沒有下一境界
   const isMaxRealm = realmTemplates.length > 0 && !nextRealm;
+
+  // 突破成功率（從下一境界模板取得）
+  const breakSuccessRate = nextRealm
+    ? Math.min(nextRealm.success_rate ?? 100, nextRealm.success_rate_cap ?? 100)
+    : 100;
+
+  // 壽元剩餘警告（剩餘不足 20% 時提示）
+  const lifeRemain    = maxAge - age;
+  const lifeRemainPct = maxAge > 0 ? (lifeRemain / maxAge) * 100 : 100;
+  const isLifeLow     = lifeRemainPct <= 20 && lifeRemain > 0;
 
   // ── 境界突破 ────────────────────────────────────────────────────
   const handleBreakthrough = async () => {
@@ -171,7 +185,7 @@ export default function StatusView() {
 
       {/* 周天靈氣 / 突破按鈕 */}
       {canBreak ? (
-        <div className="shrink-0 mb-2 w-full max-w-[240px]">
+        <div className="shrink-0 mb-2 w-full max-w-[240px] flex flex-col items-center gap-1">
           <button
             onClick={handleBreakthrough}
             disabled={isBreaking}
@@ -186,11 +200,24 @@ export default function StatusView() {
           >
             {isBreaking ? '突破中...' : '⚡ 衝擊境界'}
           </button>
+          {breakSuccessRate < 100 && (
+            <span className="text-[11px] tracking-wider font-serif"
+              style={{ color: breakSuccessRate < 50 ? '#FF3B30' : '#FFD700', opacity: 0.8 }}>
+              突破機率 {breakSuccessRate}%
+            </span>
+          )}
         </div>
       ) : (
         <div className="text-[clamp(10px,3cqw,13px)] text-white/70 tracking-[0.2em] font-serif text-center shrink-0 mb-1">
           周天靈氣 {aura} / {maxAura}
           {isMaxRealm && <span className="ml-2 text-[#FFD700]/60">（已臻巔峰）</span>}
+        </div>
+      )}
+
+      {/* 壽元剩餘警告 */}
+      {isLifeLow && (
+        <div className="text-[11px] text-[#FF3B30]/80 tracking-[0.2em] font-serif text-center shrink-0 animate-pulse">
+          ⚠ 壽元將盡（剩餘 {lifeRemain} 歲）
         </div>
       )}
 
@@ -208,20 +235,36 @@ export default function StatusView() {
         {/* 右：數值列表 */}
         <div className="flex flex-col flex-grow text-white/90 tracking-[0.2em] font-serif gap-[1.5vh]">
 
-          {/* 境界名稱 */}
-          <div className="text-[clamp(18px,5.5cqw,22px)] mb-1 drop-shadow-md">
-            {realmName}
+          {/* 境界名稱（大境界 + 小境界）*/}
+          <div className="flex flex-col mb-1">
+            {realmStage && realmStage !== realmName && (
+              <span className="text-[clamp(11px,3.5cqw,14px)] opacity-60 tracking-[0.3em]">
+                {realmStage}
+              </span>
+            )}
+            <span className="text-[clamp(18px,5.5cqw,22px)] drop-shadow-md">
+              {realmName}
+            </span>
           </div>
 
           {/* 屬性列 */}
           {[
-            { label: '壽元', value: `${player.age ?? 0}/${player.max_age ?? 0}` },
+            {
+              label: '壽元',
+              value: `${age}/${maxAge}`,
+              warn: isLifeLow,
+            },
             { label: '靈力', value: `${player.mp ?? 0}/${player.max_mp ?? 0}` },
             { label: '神識', value: `${player.god_sense ?? 0}/${player.max_god_sense ?? 0}` },
-          ].map(({ label, value }) => (
+          ].map(({ label, value, warn }) => (
             <div key={label} className="flex justify-between items-end w-full">
               <span className="opacity-80 text-[clamp(15px,4.5cqw,18px)] tracking-[0.4em]">{label}</span>
-              <span className="font-mono text-[clamp(16px,5cqw,20px)] tracking-wider drop-shadow-sm">{value}</span>
+              <span
+                className="font-mono text-[clamp(16px,5cqw,20px)] tracking-wider drop-shadow-sm"
+                style={warn ? { color: '#FF3B30' } : undefined}
+              >
+                {value}
+              </span>
             </div>
           ))}
 

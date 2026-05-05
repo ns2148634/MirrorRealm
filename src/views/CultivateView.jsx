@@ -82,8 +82,8 @@ export default function CultivateView() {
   const [isModified, setIsModified] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 神識計算邏輯
-  const maxGodSense = 50;
+  // 神識計算邏輯（從玩家屬性取得，隨境界成長）
+  const maxGodSense = player?.max_god_sense ?? 100;
   let currentLoad = 0;
   Object.entries(gear.talisman).forEach(([id, count]) => {
     const item = inventory.talisman.find(t => t.id === id);

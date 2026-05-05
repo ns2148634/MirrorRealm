@@ -27,13 +27,16 @@ export async function syncAuth(authId, name = null, gender = null) {
 
     // 建立新角色（凡人初始數值）
     // players.id 是 FK → auth.users.id，必須等於 Supabase auth UUID
+    // max_age=80：凡人期壽元上限設計為 80 歲
     const result = await query(
         `INSERT INTO players
             (id, auth_id, name, gender,
+             age, max_age,
              hp, max_hp, sp, max_sp, ep, max_ep,
              attack, defense, realm_level, mind,
              silver, spirit_stones, last_sync_time)
          VALUES ($1::uuid, $1, $2, $3,
+                 16, 80,
                  100, 100, 100, 100, 100, 100,
                  10, 5, 1, 0,
                  50, 0, NOW())
