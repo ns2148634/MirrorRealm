@@ -153,7 +153,9 @@ WHERE node_type IN ('妖獸', '機緣')
 -- ============================================================
 
 INSERT INTO lbs_node_templates (node_type, node_name, sp_cost, hp_cost, phase, mud_texts, lbs_categories)
-SELECT node_type, node_name, sp_cost, hp_cost, phase, mud_texts::jsonb, lbs_categories::text[]
+SELECT node_type, node_name, sp_cost, hp_cost, phase,
+       ARRAY(SELECT jsonb_array_elements_text(mud_texts::jsonb)) AS mud_texts,
+       lbs_categories::text[]
 FROM (VALUES
   -- ── 凡人期 ──
   ('勞作', '田間農活',   10, 0, 'mortal',
