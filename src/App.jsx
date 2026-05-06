@@ -20,7 +20,8 @@ export default function App() {
 
   // 啟動時檢查 Supabase session
   useEffect(() => {
-    checkAuthAndPlayer();
+    const unsubscribe = checkAuthAndPlayer();
+    return unsubscribe;
   }, [checkAuthAndPlayer]);
 
   // gameStage 進入 playing 後，拉一次最新資料並啟動在線回復

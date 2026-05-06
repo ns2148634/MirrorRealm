@@ -51,6 +51,25 @@ export default function CultivateView() {
   const triggerCombat = useGameStore((state) => state.triggerCombat);
   const isMale = player?.gender !== 'female';
   const auraColor = isMale ? '#00E5FF' : '#9B5CFF';
+
+  // 凡人期（realm_level ≤ 1）尚未踏入修行之道，鎖定此頁
+  if ((player?.realm_level ?? 1) <= 1) {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center gap-6 select-none"
+        style={{ background: 'transparent' }}
+      >
+        <div className="text-[64px] opacity-20" style={{ filter: 'grayscale(1)' }}>⚙</div>
+        <div className="text-center px-10">
+          <p className="font-serif tracking-[0.35em] text-[clamp(16px,5cqw,20px)] text-white/50 mb-2">
+            修行之道未開
+          </p>
+          <p className="font-serif tracking-[0.2em] text-[clamp(12px,3.5cqw,14px)] text-white/30">
+            突破至煉氣期後方可配置法陣
+          </p>
+        </div>
+      </div>
+    );
+  }
   const meditatorImg = player?.gender === 'female' ? 'meditator_female.svg' : 'meditator_male.svg';
 
   const [inventory, setInventory] = useState(EMPTY_CULTIVATE_INVENTORY);

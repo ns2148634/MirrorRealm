@@ -21,20 +21,20 @@ export default function StatOrbs({ player }) {
 
 // 🔮 帶有極簡數字的靈氣紋元件
 const SpiritualVein = ({ icon, val, max, pct, color, shadow }) => (
-  <div className="flex flex-col items-end gap-[1px] opacity-90">
-    
+  <div className="flex-1 flex flex-col items-end gap-[1px] opacity-90">
+
     {/* 上半部：圖示與光軌 */}
-    <div className="flex items-center gap-1.5">
+    <div className="w-full flex items-center gap-1.5">
       <div className="w-[14px] h-[14px] flex-shrink-0 flex items-center justify-center">
-        <img 
-          src={`/images/status/${icon}.svg`} 
+        <img
+          src={`/images/status/${icon}.svg`}
           alt={icon}
           className="w-full h-full object-contain opacity-90"
           style={{ filter: `drop-shadow(0 0 4px ${color})` }}
         />
       </div>
-      
-      <div className="w-[20cqw] max-w-[80px] h-[2px] bg-white/10 rounded-full overflow-hidden">
+
+      <div className="flex-1 h-[2px] bg-white/10 rounded-full overflow-hidden">
         <div
           className="h-full transition-all duration-700 ease-out rounded-full relative"
           style={{ width: `${pct}%`, backgroundColor: color, boxShadow: `0 0 8px ${shadow}` }}

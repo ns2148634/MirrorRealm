@@ -46,7 +46,7 @@ const useGameStore = create((set, get) => ({
   // 不再呼叫 getSession()，避免 PKCE code exchange 未完成就
   // 得到 null session，覆蓋掉 SIGNED_IN 已設好的 'playing' 狀態。
   checkAuthAndPlayer: () => {
-    supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
         // 已有 session（既有登入 or OAuth 回調完成）→ 同步玩家
         get()._syncPlayerWithBackend(session.user.id);
@@ -55,6 +55,7 @@ const useGameStore = create((set, get) => ({
         set({ gameStage: 'login', player: null });
       }
     });
+    return () => subscription.unsubscribe();
   },
 
   // ── 內部：呼叫後端 /api/auth/sync，決定進入哪個 stage ────────

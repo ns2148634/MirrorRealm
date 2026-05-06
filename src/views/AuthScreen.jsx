@@ -46,11 +46,16 @@ export default function AuthScreen() {
   const [gender, setGender] = useState('保密');
 
   const googleBtnRef = useRef(null);
+  const gameStageRef = useRef(gameStage);
 
   // ── gameStage 同步 phase ──────────────────────────────────────
   useEffect(() => {
+    gameStageRef.current = gameStage;
     if (gameStage === 'naming') {
       setPhase('create');
+      markIntroFinished();
+    } else if (gameStage === 'playing') {
+      // session 恢復後直接標記動畫完成，不顯示登入頁
       markIntroFinished();
     }
   }, [gameStage]);
@@ -82,11 +87,14 @@ export default function AuthScreen() {
       // 全部線畫完的時間
       const allLinesDone = allStarsDone + LINE_GAP + (newEdges.length - 1) * LINE_BEAT + LINE_DUR;
 
-      const t1 = setTimeout(() => setLinesReady(true),  allStarsDone * 1000);
-      const t2 = setTimeout(() => setPhase('login'),   (allLinesDone + 1.2) * 1000);
-      const t3 = setTimeout(() => markIntroFinished(), (allLinesDone + 1.2) * 1000);
+      const t1 = setTimeout(() => setLinesReady(true), allStarsDone * 1000);
+      const t2 = setTimeout(() => {
+        // 若 session 已恢復（playing），不顯示登入頁，直接結束
+        if (gameStageRef.current !== 'playing') setPhase('login');
+        markIntroFinished();
+      }, (allLinesDone + 1.2) * 1000);
 
-      return () => [t1, t2, t3].forEach(clearTimeout);
+      return () => [t1, t2].forEach(clearTimeout);
     });
   }, []);
 
