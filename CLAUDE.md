@@ -111,9 +111,9 @@ Tailwind CSS + inline styles. Mobile-first at `max-w-[430px]` / `max-h-[932px]`.
 
 探索事件系統尚未實作，需要從資料庫到前端完整建立：
 
-- [ ] DB migration：建立事件相關資料表（008_event_system.sql）
+- [x] DB migration：建立事件相關資料表（008_event_system.sql、009_jade_scroll_item.sql）
 - [ ] 事件批次生成腳本（Claude API → Supabase）
-- [ ] 後端 API：取得事件 / 推進事件 / 結算事件
+- [x] 後端 API：取得事件 / 推進事件 / 結算事件（server/services/exploreService.js）
 - [ ] 前端：ExploreView 事件互動介面
 - [ ] 玉簡系統（天機閣交易）
 
