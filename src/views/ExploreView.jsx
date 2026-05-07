@@ -770,102 +770,116 @@ export default function ExploreView() {
         <div className="fixed inset-0 z-[60] flex flex-col bg-[#070A0F]/96" style={{ paddingTop: 'env(safe-area-inset-top, 16px)' }}>
 
           {/* Top bar */}
-          <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/5">
-            {/* Tier badge */}
-            <div className="px-3 py-1 rounded-full text-sm font-bold tracking-[4px]"
+          <div className="flex items-center justify-between px-5 pt-3 pb-3 border-b border-white/5 shrink-0">
+            <div className="px-3 py-1 rounded-full text-[13px] font-bold tracking-[3px]"
               style={{ color: TIER_COLOR[eventData.event_tier]?.text, border: `1px solid ${TIER_COLOR[eventData.event_tier]?.border}`, background: TIER_COLOR[eventData.event_tier]?.bg }}>
               {TIER_LABEL[eventData.event_tier] ?? 'T?'}品
             </div>
 
-            {/* Layer progress dots */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {Array.from({ length: eventData.total_layers }, (_, i) => {
                 const layerNum = i + 1;
                 const isCurrent = layerNum === eventData.current_layer;
                 const isPast    = layerNum < eventData.current_layer;
-                const isStart   = layerNum === eventData.start_layer;
                 return (
-                  <div key={i} className="flex flex-col items-center gap-0.5">
-                    <div className={`rounded-full transition-all duration-300 ${isCurrent ? 'w-3 h-3 bg-[#00E5FF]' : isPast ? 'w-2.5 h-2.5 bg-[#00E5FF]/40' : 'w-2 h-2 bg-white/15'}`}
-                      style={isCurrent ? { boxShadow: '0 0 6px rgba(0,229,255,0.8)' } : {}} />
-                    {isStart && <div className="w-1 h-1 rounded-full bg-[#00E5FF]/60" />}
-                  </div>
+                  <div key={i} className={`rounded-full transition-all duration-300 ${isCurrent ? 'w-2.5 h-2.5 bg-[#00E5FF]' : isPast ? 'w-2 h-2 bg-[#00E5FF]/40' : 'w-1.5 h-1.5 bg-white/15'}`}
+                    style={isCurrent ? { boxShadow: '0 0 5px rgba(0,229,255,0.8)' } : {}} />
                 );
               })}
-              <span className="text-white/40 text-[11px] ml-1">{eventData.current_layer}/{eventData.total_layers}</span>
+              <span className="text-white/35 text-[11px] ml-1 tabular-nums">{eventData.current_layer}/{eventData.total_layers}</span>
             </div>
 
-            {/* Attribute badge */}
-            <div className="px-3 py-1 rounded-full text-sm tracking-[4px]"
+            <div className="px-3 py-1 rounded-full text-[13px] tracking-[3px]"
               style={{ color: ATTR_COLOR[eventData.event_attribute], border: `1px solid ${ATTR_COLOR[eventData.event_attribute]}55`, background: `${ATTR_COLOR[eventData.event_attribute]}11` }}>
               {ATTR_ICON[eventData.event_attribute]} {ATTR_LABEL[eventData.event_attribute]}
             </div>
           </div>
 
-          {/* Alert level bar */}
-          <div className="px-5 pt-3 pb-1">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] text-white/40 tracking-[3px]">驚動值</span>
-              <span className="text-[12px] font-mono tracking-wider" style={{ color: alertColor(eventData.alert_level ?? 0) }}>
-                {eventData.alert_level >= 100 ? '已驚動！' : `${eventData.alert_level ?? 0}`}
+          {/* Alert bar */}
+          <div className="px-5 pt-2 pb-1 shrink-0">
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-white/35 tracking-[2px] shrink-0">驚動</span>
+              <div className="flex-1 h-1.5 rounded-full bg-white/8 overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${eventData.alert_level ?? 0}%`, backgroundColor: alertColor(eventData.alert_level ?? 0), boxShadow: `0 0 5px ${alertColor(eventData.alert_level ?? 0)}80` }} />
+              </div>
+              <span className="text-[12px] font-mono tabular-nums shrink-0" style={{ color: alertColor(eventData.alert_level ?? 0) }}>
+                {eventData.alert_level >= 100 ? '！' : `${eventData.alert_level ?? 0}`}
               </span>
-            </div>
-            <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500"
-                style={{ width: `${eventData.alert_level ?? 0}%`, backgroundColor: alertColor(eventData.alert_level ?? 0), boxShadow: `0 0 6px ${alertColor(eventData.alert_level ?? 0)}80` }} />
             </div>
           </div>
 
-          {/* Layer text card */}
-          <div className="flex-1 flex flex-col px-5 pt-4 pb-2 overflow-hidden">
-            {/* Alert feedback flash */}
+          {/* Layer text — scrollable */}
+          <div className="flex-1 overflow-y-auto px-5 py-3 min-h-0">
             {alertFeedback && (
-              <div className="mb-3 text-center animate-[fade-up_0.2s_ease-out]"
+              <div className="mb-2 text-center animate-[fade-up_0.2s_ease-out]"
                 style={{ color: alertFeedback.positive ? '#32D74B' : '#FF6B35' }}>
-                <span className="text-sm tracking-widest">{alertFeedback.text}</span>
+                <span className="text-[13px] tracking-widest">{alertFeedback.text}</span>
               </div>
             )}
 
-            {/* Current layer */}
-            <div className="flex-1 bg-black/40 border border-[#00E5FF]/15 rounded-2xl p-5 flex flex-col justify-between">
-              <div>
-                <div className="text-[11px] text-[#00E5FF]/40 tracking-[4px] mb-3">第 {eventData.current_layer} 層感應</div>
-                <p className="text-white/85 text-[15px] leading-[1.9] tracking-wider min-h-[80px]">
-                  {typedText}
-                  {typedText.length < eventText.length && (
-                    <span className="opacity-60 animate-pulse">▌</span>
-                  )}
-                </p>
-              </div>
-
-              {/* Blur layers below current */}
-              {eventData.layers?.filter(l => l.layer > eventData.current_layer).map(l => (
-                <div key={l.layer} className="mt-4 pt-3 border-t border-white/5">
-                  <div className="text-[10px] text-white/20 tracking-[3px] mb-1.5">第 {l.layer} 層</div>
-                  <p className="text-white/20 text-[13px] leading-relaxed tracking-wider italic">
-                    你隱約感覺此地有更深的變化，但神識無法穿透
-                  </p>
-                </div>
-              ))}
+            <div className="bg-black/40 border border-[#00E5FF]/15 rounded-2xl p-4">
+              <div className="text-[10px] text-[#00E5FF]/40 tracking-[3px] mb-2">第 {eventData.current_layer} 層感應</div>
+              <p className="text-white/85 text-[15px] leading-[1.8] tracking-wider">
+                {typedText}
+                {typedText.length < eventText.length && (
+                  <span className="opacity-60 animate-pulse">▌</span>
+                )}
+              </p>
             </div>
+
+            {eventData.layers?.filter(l => l.layer > eventData.current_layer).map(l => (
+              <div key={l.layer} className="mt-3 bg-black/20 border border-white/5 rounded-xl p-4">
+                <div className="text-[10px] text-white/20 tracking-[3px] mb-1.5">第 {l.layer} 層</div>
+                <p className="text-white/20 text-[13px] leading-relaxed tracking-wider italic">此地尚有變化，神識無法穿透…</p>
+              </div>
+            ))}
           </div>
 
-          {/* Action buttons */}
-          <div className="px-4 pb-[calc(env(safe-area-inset-bottom,16px)+8px)] pt-3 border-t border-white/5">
-            <div className="grid grid-cols-5 gap-2">
-              {ACTIONS.map(({ code, label, icon, cost, costColor }) => (
+          {/* Action buttons — 3 + 2 layout */}
+          <div className="px-4 pb-[calc(env(safe-area-inset-bottom,12px)+4px)] pt-2 border-t border-white/5 shrink-0">
+            {/* Primary actions */}
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {ACTIONS.filter(a => ['search','wait','stone'].includes(a.code)).map(({ code, label, icon, cost, costColor }) => (
                 <button
                   key={code}
                   disabled={eventLoading}
                   onClick={() => handleEventAction(code)}
-                  className="flex flex-col items-center py-3 px-1 rounded-xl border border-white/10 bg-white/3 active:scale-95 transition-all duration-150 disabled:opacity-40"
-                  style={{ background: 'rgba(255,255,255,0.03)' }}
+                  className="flex flex-col items-center py-3 rounded-xl border border-white/10 active:scale-95 transition-all duration-150 disabled:opacity-40"
+                  style={{ background: 'rgba(255,255,255,0.04)' }}
                 >
-                  <span className="text-xl mb-1">{icon}</span>
-                  <span className="text-[11px] text-white/80 tracking-wider leading-tight text-center">{label}</span>
-                  <span className="text-[10px] mt-1 leading-none text-center" style={{ color: costColor }}>{cost}</span>
+                  <span className="text-lg mb-1">{icon}</span>
+                  <span className="text-[12px] text-white/80 tracking-wide leading-tight">{label}</span>
+                  <span className="text-[10px] mt-1 leading-none" style={{ color: costColor }}>{cost}</span>
                 </button>
               ))}
+            </div>
+            {/* Exit actions */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                disabled={eventLoading}
+                onClick={() => handleEventAction('retreat')}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 active:scale-95 transition-all duration-150 disabled:opacity-40"
+                style={{ background: 'rgba(255,255,255,0.03)' }}
+              >
+                <span className="text-base">🚶</span>
+                <div className="text-left">
+                  <div className="text-[12px] text-white/50 tracking-wide leading-none">撤退</div>
+                  <div className="text-[10px] text-white/25 mt-0.5">無消耗</div>
+                </div>
+              </button>
+              <button
+                disabled={eventLoading}
+                onClick={() => { setJadeNote(''); setEventPhase('jade'); }}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#C084FC]/25 active:scale-95 transition-all duration-150 disabled:opacity-40"
+                style={{ background: 'rgba(192,132,252,0.06)' }}
+              >
+                <span className="text-base">📜</span>
+                <div className="text-left">
+                  <div className="text-[12px] text-[#C084FC]/80 tracking-wide leading-none">刻入玉簡</div>
+                  <div className="text-[10px] text-[#C084FC]/40 mt-0.5">空白玉簡×1</div>
+                </div>
+              </button>
             </div>
           </div>
         </div>

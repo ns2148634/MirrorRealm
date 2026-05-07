@@ -114,7 +114,7 @@ Tailwind CSS + inline styles. Mobile-first at `max-w-[430px]` / `max-h-[932px]`.
 - [x] DB migration：建立事件相關資料表（008_event_system.sql、009_jade_scroll_item.sql）
 - [x] 事件批次生成腳本（手動生成44條入庫）；腳本：scripts/insert-events.mjs + seed-test-events.mjs
 - [x] 後端 API：取得事件 / 推進事件 / 結算事件（server/services/exploreService.js）
-- [x] 前端：ExploreView 事件互動介面（推演期、互動期、結果、玉簡確認）
+- [x] 前端：ExploreView 事件互動介面（推演期、互動期、結果、玉簡確認）；動作列改為 3+2 兩排佈局（探查/等待/靈石 + 撤退/玉簡）
 - [ ] 玉簡系統（天機閣交易）
 
 ### 🔲 待實作（事件系統之後）
