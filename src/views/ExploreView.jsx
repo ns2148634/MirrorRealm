@@ -398,7 +398,11 @@ export default function ExploreView() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player_id: player.id, poi_type: 'unknown', weather: 'cloudy' }),
-      }).then(r => r.json());
+      }).then(async r => {
+        const text = await r.text();
+        try { return JSON.parse(text); }
+        catch { throw new Error(`伺服器回應異常 (${r.status})`); }
+      });
 
       const [, json] = await Promise.all([minDelay, scanPromise]);
 
@@ -417,7 +421,9 @@ export default function ExploreView() {
       setEventPhase('inference');
     } catch (err) {
       console.error('[事件掃描] 失敗:', err);
-      setMessage('天地法則紊亂，感應失敗');
+      const msg = err?.message || '天地法則紊亂，感應失敗';
+      setMessage(msg.length <= 20 ? msg : '天地法則紊亂，感應失敗');
+      console.warn('[事件掃描] 原始錯誤:', msg);
       setEventPhase('map');
       setEventLoading(false);
     }

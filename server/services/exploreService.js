@@ -171,11 +171,17 @@ export async function scanForEvent(playerId, poiType, weather) {
   const event = er.rows[0];
   const startLayer = calcStartLayer(player.god_sense, event.hidden_level, event.total_layers);
 
+  // 清除舊的未完成 inference 事件（避免殘留累積）
+  await db.query(
+    `DELETE FROM player_events WHERE player_id=$1 AND phase='inference'`,
+    [playerId]
+  );
+
   const per = await db.query(
     `INSERT INTO player_events
        (player_id, event_id, current_layer, start_layer, correct_count,
         total_visited, alert_level, phase, action_log)
-     VALUES ($1, $2, $3, $3, 0, 0, 0, 'inference', '[]')
+     VALUES ($1, $2, $3, $3, 0, 0, 0, 'inference', '[]'::jsonb)
      RETURNING *`,
     [playerId, event.id, startLayer]
   );
