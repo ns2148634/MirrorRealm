@@ -1,60 +1,11 @@
 // server/services/exploreService.js
 import * as db from '../config/db.js';
 import { calculateOfflineDelta } from '../lib/recovery.js';
-import { z } from 'zod';
-
-// ── Zod schemas for event JSONB fields ───────────────────────────
-
-/** 單層推演資料：文本 + 最佳動作 + 錯誤動作的驚動值加成 */
-const LayerSchema = z.object({
-  text:            z.string(),
-  best_action:     z.enum(['search', 'wait', 'stone', 'retreat', 'jade']),
-  wrong_alert_add: z.number().optional(),
-  blur_text:       z.string().optional(),
-}).passthrough();
-
-/** progression：{ L1: {...}, L2: {...}, ... } */
-const ProgressionSchema = z.record(z.string(), LayerSchema);
-
-/**
- * outcome_weights：worst_result 固定為 string，其餘 key 為 number 權重。
- * .catchall(z.number()) 只作用於 z.object() 未明確定義的 key。
- */
-const OutcomeWeightsSchema = z.object({
-  worst_result: z.string(),
-}).catchall(z.number());
-
-/** action_modifiers：{ good: { search: 2.0, wait: 1.5 }, failure: {...} } */
-const ActionModifiersSchema = z.record(z.string(), z.record(z.string(), z.number()));
-
-/** 完整事件資料驗證 schema（從 DB 讀取後使用） */
-const EventSchema = z.object({
-  id:              z.string().uuid(),
-  tier:            z.number().int().min(1).max(5),
-  attribute:       z.enum(['fire', 'water', 'wood', 'metal', 'earth']),
-  hidden_level:    z.number().int(),
-  total_layers:    z.number().int().min(1).max(6),
-  progression:     ProgressionSchema,
-  outcome_weights: OutcomeWeightsSchema,
-  action_modifiers: ActionModifiersSchema,
-  base_rare_rate:  z.number(),
-  entity_data:     z.record(z.string(), z.unknown()).optional().default({}),
-}).passthrough();
-
-/**
- * 從 DB row 解析並驗證事件資料。
- * 解析失敗時拋出帶有明確說明的錯誤，避免後續在 undefined 上讀取欄位造成隱晦崩潰。
- */
-function parseEvent(row) {
-  const result = EventSchema.safeParse(row);
-  if (!result.success) {
-    const issues = result.error.issues
-      .map(i => `${i.path.join('.')}: ${i.message}`)
-      .join('; ');
-    throw new Error(`事件資料格式錯誤 (id=${row?.id ?? '?'}): ${issues}`);
-  }
-  return result.data;
-}
+import {
+  ProgressionSchema,
+  EventSchema,
+  parseEvent,
+} from '../../src/types/eventSchemas.js';
 
 // ── Constants ────────────────────────────────────────────────────
 
