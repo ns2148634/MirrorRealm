@@ -6,24 +6,27 @@ dotenv.config({ path: '.env.local' });
 const { Pool } = pg;
 
 /**
- * Serverless 友好的 Pool 設定：
+ * 動態 Pool 設定：
  *
- * 問題：Vercel / Render Free Tier 的每個 Function Invocation 可能是全新的 process，
- * 也可能複用前一個 warm instance。pg.Pool 預設會維持最多 10 條 TCP 連線，
- * 在 serverless 環境中這些連線會在 invocation 結束後「殭屍化」（process 休眠但
- * Supabase pooler 仍認為連線存在），下次 warm 重啟時拿到死連線。
+ * IS_SERVERLESS=true  → max:1 / idleTimeout:0
+ *   Vercel / Render Serverless：每個 invocation 可能是全新 process，
+ *   Pool 連線在休眠後殭屍化；限制 max:1 避免堆積。
  *
- * 修正：
- *   max: 1               — 每個 instance 最多 1 條連線，避免殭屍連線堆積
- *   idleTimeoutMillis: 0 — 不主動保持 idle 連線（讓 pooler 自行管理生命週期）
- *   connectionTimeoutMillis: 5000 — 5 秒建不上就丟 error，不讓 Lambda 卡死
+ * IS_SERVERLESS 未設定（本地 / 長駐 Render Web Service）→ max:10 / idleTimeout:10000
+ *   長駐伺服器可維持連線池，提升並發效能。
+ *
+ * connectionTimeoutMillis: 5000 — 兩種模式共用，5 秒建不上就拋錯。
  */
+const isServerless = process.env.IS_SERVERLESS === 'true' || process.env.IS_SERVERLESS === '1';
+
 const pool = new Pool({
     connectionString:        process.env.DATABASE_URL,
-    max:                     1,
-    idleTimeoutMillis:       0,
+    max:                     isServerless ? 1 : 10,
+    idleTimeoutMillis:       isServerless ? 0 : 10000,
     connectionTimeoutMillis: 5000,
 });
+
+console.info(`[db] Pool mode: ${isServerless ? 'serverless (max=1)' : 'persistent (max=10)'}`);
 
 pool.on('error', (err) => {
     console.error('資料庫連線發生未預期的錯誤', err);
