@@ -159,7 +159,28 @@ export default function ExploreView() {
   const [resolveResult, setResolveResult] = useState(null);
   const [jadeNote,      setJadeNote]      = useState('');
   const [eventLoading,  setEventLoading]  = useState(false);
-  const [alertFeedback, setAlertFeedback] = useState(null); // shown after wrong action
+  const [alertFeedback,   setAlertFeedback]   = useState(null);
+  const [visibleLogLines, setVisibleLogLines] = useState(0);
+  const battleLogScrollRef = useRef(null);
+
+  // Battle log: reveal one line every 600ms, then auto-scroll
+  useEffect(() => {
+    if (!activeModal?.battleLog?.length) return;
+    setVisibleLogLines(0);
+    let i = 0;
+    const total = activeModal.battleLog.length;
+    const id = setInterval(() => {
+      i++;
+      setVisibleLogLines(i);
+      if (i >= total) clearInterval(id);
+    }, 600);
+    return () => clearInterval(id);
+  }, [activeModal?.battleLog]);
+
+  useEffect(() => {
+    if (!battleLogScrollRef.current) return;
+    battleLogScrollRef.current.scrollTo({ top: battleLogScrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [visibleLogLines]);
 
   // Typewriter animation — re-triggers whenever eventText changes
   useEffect(() => {
@@ -277,7 +298,12 @@ export default function ExploreView() {
       });
       return;
     }
-    setActiveModal({ step: 'info', node: clickedNode });
+    // Spring / player nodes keep the info modal; all other nodes go straight to event scan
+    if (clickedNode.nodeType === '靈泉' || clickedNode.nodeType === '道友') {
+      setActiveModal({ step: 'info', node: clickedNode });
+    } else {
+      startEventScan(clickedNode);
+    }
   };
 
   const confirmExecuteNode = async () => {
@@ -727,8 +753,8 @@ export default function ExploreView() {
                   {activeModal.battleLog ? (
                     <>
                       <h3 className={`text-2xl mb-4 font-bold tracking-widest ${activeModal.outcome === 'win' ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>{activeModal.outcome === 'win' ? '⚔ 勝利' : '💀 重傷'}</h3>
-                      <div className="bg-black/60 border border-white/10 rounded-xl p-4 mb-4 max-h-[240px] overflow-y-auto text-left space-y-1.5 font-mono text-[13px] leading-relaxed">
-                        {activeModal.battleLog.map((entry, i) => <p key={i} style={{ color: LOG_LINE_COLOR[entry.type] ?? '#9CA3AF' }}>{entry.text}</p>)}
+                      <div ref={battleLogScrollRef} className="bg-black/60 border border-white/10 rounded-xl p-4 mb-4 max-h-[240px] overflow-y-auto text-left space-y-1.5 font-mono text-[13px] leading-relaxed">
+                        {activeModal.battleLog.slice(0, visibleLogLines).map((entry, i) => <p key={i} style={{ color: LOG_LINE_COLOR[entry.type] ?? '#9CA3AF' }}>{entry.text}</p>)}
                       </div>
                       <div className="bg-black/40 rounded-xl p-4 mb-4 border border-white/5 text-sm space-y-2">
                         {activeModal.expGained > 0 && <p className="text-[#32D74B] tracking-widest">靈氣 +{activeModal.expGained}</p>}
@@ -758,7 +784,7 @@ export default function ExploreView() {
 
       {/* 7a. Scanning animation */}
       {eventPhase === 'scanning' && (
-        <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/92">
+        <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/92">
           <div className="relative flex items-center justify-center mb-10">
             <div className="absolute w-32 h-32 rounded-full border border-[#00E5FF]/30 animate-[ripple-out_2s_0.0s_infinite_ease-out]" />
             <div className="absolute w-32 h-32 rounded-full border border-[#00E5FF]/20 animate-[ripple-out_2s_0.7s_infinite_ease-out]" />
@@ -773,7 +799,7 @@ export default function ExploreView() {
 
       {/* 7b. Inference phase */}
       {eventPhase === 'inference' && eventData && (
-        <div className="fixed inset-0 z-[60] flex flex-col bg-[#070A0F]/96" style={{ paddingTop: 'env(safe-area-inset-top, 16px)' }}>
+        <div className="absolute inset-0 z-[60] flex flex-col bg-[#070A0F]/96" style={{ paddingTop: 'env(safe-area-inset-top, 16px)' }}>
 
           {/* Top bar */}
           <div className="flex items-center justify-between px-5 pt-3 pb-3 border-b border-white/5 shrink-0">
@@ -825,7 +851,6 @@ export default function ExploreView() {
             )}
 
             <div className="bg-black/40 border border-[#00E5FF]/15 rounded-2xl p-4">
-              <div className="text-[10px] text-[#00E5FF]/40 tracking-[3px] mb-2">第 {eventData.current_layer} 層感應</div>
               <p className="text-white/85 text-[15px] leading-[1.8] tracking-wider">
                 {typedText}
                 {typedText.length < eventText.length && (
@@ -893,7 +918,7 @@ export default function ExploreView() {
 
       {/* 7c. Interaction phase */}
       {eventPhase === 'interaction' && eventData && (
-        <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-[#070A0F]/96 px-6" style={{ paddingTop: 'env(safe-area-inset-top, 16px)', paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}>
+        <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-[#070A0F]/96 px-6" style={{ paddingTop: 'env(safe-area-inset-top, 16px)', paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}>
 
           {/* Tier + attribute row */}
           <div className="flex items-center gap-3 mb-8">
@@ -905,11 +930,6 @@ export default function ExploreView() {
               style={{ color: ATTR_COLOR[eventData.event_attribute], border: `1px solid ${ATTR_COLOR[eventData.event_attribute]}55`, background: `${ATTR_COLOR[eventData.event_attribute]}11` }}>
               {ATTR_ICON[eventData.event_attribute]} {ATTR_LABEL[eventData.event_attribute]}
             </div>
-          </div>
-
-          {/* Interaction banner */}
-          <div className="mb-6 px-6 py-2 border border-[#FFD700]/40 rounded-full bg-[#FFD700]/8">
-            <span className="text-[#FFD700] text-sm tracking-[8px]">互動期</span>
           </div>
 
           {/* Text */}
@@ -969,7 +989,7 @@ export default function ExploreView() {
           : resultDisplay(resolveResult.result, resolveResult.rare_triggered);
         const stones = resolveResult.stones_gained ?? 0;
         return (
-          <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-[#070A0F]/96 px-6" style={{ paddingTop: 'env(safe-area-inset-top, 16px)', paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}>
+          <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-[#070A0F]/96 px-6" style={{ paddingTop: 'env(safe-area-inset-top, 16px)', paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}>
             {/* Result icon */}
             <div className="text-6xl mb-5 animate-[fade-up_0.4s_ease-out]">{display.icon}</div>
             <h2 className="text-3xl font-bold tracking-[6px] mb-10 animate-[fade-up_0.4s_0.1s_ease-out_both]" style={{ color: display.color }}>{display.title}</h2>
@@ -1021,7 +1041,7 @@ export default function ExploreView() {
 
       {/* 7e. Jade confirm */}
       {eventPhase === 'jade' && eventData && (
-        <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-[#070A0F]/96 px-6" style={{ paddingTop: 'env(safe-area-inset-top, 16px)', paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}>
+        <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-[#070A0F]/96 px-6" style={{ paddingTop: 'env(safe-area-inset-top, 16px)', paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}>
           <div className="text-4xl mb-5">📜</div>
           <h3 className="text-xl font-bold tracking-[6px] text-[#C084FC] mb-3">刻入玉簡</h3>
           <p className="text-white/40 text-sm tracking-wider text-center mb-8 leading-relaxed">

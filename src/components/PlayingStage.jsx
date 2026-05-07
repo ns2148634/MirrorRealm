@@ -103,7 +103,10 @@ export default function PlayingStage() {
       >
         {currentMode === 'status' && <StatusView />}
         {currentMode === 'cultivate' && <CultivateView />}
-        {currentMode === 'explore' && <ExploreView />}
+        {/* Always mounted so active event state survives tab switches */}
+        <div className={currentMode !== 'explore' ? 'hidden' : 'contents'}>
+          <ExploreView />
+        </div>
         {currentMode === 'bag' && <BagView />}
         {currentMode === 'network' && <WorldView />}
 
