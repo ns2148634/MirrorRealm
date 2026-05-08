@@ -152,8 +152,8 @@ export async function scanForEvent(playerId, poiType, weather) {
 
   if (after.ep < 5) {
     await db.query(
-      `UPDATE players SET hp=$1, sp=$2, ep=$3, last_sync_time=$4 WHERE id=$5`,
-      [after.hp, after.sp, after.ep, now, playerId]
+      `UPDATE players SET hp=$1, sp=$2, ep=$3, aura=$4, last_sync_time=$5 WHERE id=$6`,
+      [after.hp, after.sp, after.ep, after.aura, now, playerId]
     );
     throw new Error('精力不足');
   }
@@ -200,8 +200,8 @@ export async function scanForEvent(playerId, poiType, weather) {
 
   const newEp = Math.min(after.ep - 5, player.max_ep);
   await db.query(
-    `UPDATE players SET hp=$1, sp=$2, ep=$3, last_sync_time=$4 WHERE id=$5`,
-    [after.hp, after.sp, newEp, now, playerId]
+    `UPDATE players SET hp=$1, sp=$2, ep=$3, aura=$4, last_sync_time=$5 WHERE id=$6`,
+    [after.hp, after.sp, newEp, after.aura, now, playerId]
   );
   await db.query(`UPDATE events SET used_count = used_count + 1 WHERE id=$1`, [event.id]);
 
@@ -281,8 +281,8 @@ export async function takeAction(playerEventId, playerId, action) {
 
   if (epCost > 0 && after.ep < epCost) {
     await db.query(
-      `UPDATE players SET hp=$1, sp=$2, ep=$3, last_sync_time=$4 WHERE id=$5`,
-      [after.hp, after.sp, after.ep, now, playerId]
+      `UPDATE players SET hp=$1, sp=$2, ep=$3, aura=$4, last_sync_time=$5 WHERE id=$6`,
+      [after.hp, after.sp, after.ep, after.aura, now, playerId]
     );
     throw new Error('精力不足');
   }
@@ -299,8 +299,8 @@ export async function takeAction(playerEventId, playerId, action) {
   if (epCost > 0) {
     const newEp = Math.min(after.ep - epCost, player.max_ep);
     await db.query(
-      `UPDATE players SET hp=$1, sp=$2, ep=$3, last_sync_time=$4 WHERE id=$5`,
-      [after.hp, after.sp, newEp, now, playerId]
+      `UPDATE players SET hp=$1, sp=$2, ep=$3, aura=$4, last_sync_time=$5 WHERE id=$6`,
+      [after.hp, after.sp, newEp, after.aura, now, playerId]
     );
   }
 
