@@ -41,6 +41,8 @@ Vite (`vite.config.js`) proxies all `/api/*` to Express on port 3000. In product
 ### View sub-state machines
 `StatusView` and `CultivateView` each manage their own multi-layer sub-navigation (e.g. `overview → entering-bt → bt → sub-view`) entirely in local `useState` — not in the global store.
 
+`ExploreView` 採用 L2 子視圖模式處理活動事件：地圖視圖 (L1) → 事件互動 (L2，`absolute inset-0 z-[60]` overlay)。事件狀態保存在元件本地 `useState`，透過 PlayingStage 的 `hidden`/`contents` 技巧（`display: none` vs `display: contents`）讓 ExploreView 始終掛載，切換頁籤不會遺失進行中的事件。
+
 ### Online recovery pattern
 `startOnlineRecovery()` in the store runs a `setInterval` that increments `hp`/`ep`/`aura` on the client for UI animation only — **no DB writes**. The DB is only updated when the player takes an action (meditate, breakthrough, explore). `GET /api/player/:id` is a pure read; all DB flushes happen in POST routes.
 
@@ -64,6 +66,11 @@ Key tables: `players`, `realm_templates` (27 realms, lv 1–27), `items`, `playe
 `players.id` equals the Supabase Auth UUID — there is no separate foreign key column.
 
 Migrations live in `supabase/migrations/` (000–007) and are applied manually with a temporary Node.js script using `pg`. The Supabase CLI is not available in this environment.
+
+### Shared types (`src/types/`)
+- `eventSchemas.js` — Zod 4 schemas (plain `.js`, importable by Node.js backend AND Vite frontend). Used in `server/services/exploreService.js` to validate JSONB fields from pg. **Note:** `pg` returns some numeric columns (e.g. `base_rare_rate`) as strings; coerce with `parseFloat` before calling `parseEvent()`.
+- `player.ts` / `event.ts` — TypeScript interfaces for frontend type-checking only (never imported by Node.js at runtime).
+- `index.ts` — barrel re-export.
 
 ### Logic modules (`src/logic/`)
 Pure TypeScript functions — no imports from React or the store. They implement the game-design formulas from `docs/`:
@@ -114,7 +121,8 @@ Tailwind CSS + inline styles. Mobile-first at `max-w-[430px]` / `max-h-[932px]`.
 - [x] DB migration：建立事件相關資料表（008_event_system.sql、009_jade_scroll_item.sql）
 - [x] 事件批次生成腳本（手動生成44條入庫）；腳本：scripts/insert-events.mjs + seed-test-events.mjs
 - [x] 後端 API：取得事件 / 推進事件 / 結算事件（server/services/exploreService.js）
-- [x] 前端：ExploreView 事件互動介面（推演期、互動期、結果、玉簡確認）；動作列改為 3+2 兩排佈局（探查/等待/靈石 + 撤退/玉簡）
+- [x] 前端 UI：L2 子視圖（absolute overlays）、無術語標題、動作列 3+2 佈局、戰鬥日誌逐行 600ms 動畫（`fade-up` 進入效果）、切換頁籤不遺失事件狀態
+- [x] 共享型別資料夾（`src/types/`）：Zod schemas (.js) + TypeScript interfaces (.ts)
 - [ ] 玉簡系統（天機閣交易）
 
 ### 🔲 待實作（事件系統之後）

@@ -688,7 +688,7 @@ export default function ExploreView() {
 
       {/* 6. Legacy node modal */}
       {activeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
           <div className="bg-[#12141A] border border-[#00E5FF]/30 rounded-2xl w-full max-w-[360px] shadow-[0_0_40px_rgba(0,229,255,0.15)] flex flex-col overflow-hidden text-center">
             <div className="h-1 w-full bg-gradient-to-r from-transparent via-[#00E5FF] to-transparent opacity-50" />
             <div className="p-7">
@@ -754,7 +754,15 @@ export default function ExploreView() {
                     <>
                       <h3 className={`text-2xl mb-4 font-bold tracking-widest ${activeModal.outcome === 'win' ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>{activeModal.outcome === 'win' ? '⚔ 勝利' : '💀 重傷'}</h3>
                       <div ref={battleLogScrollRef} className="bg-black/60 border border-white/10 rounded-xl p-4 mb-4 max-h-[240px] overflow-y-auto text-left space-y-1.5 font-mono text-[13px] leading-relaxed">
-                        {activeModal.battleLog.slice(0, visibleLogLines).map((entry, i) => <p key={i} style={{ color: LOG_LINE_COLOR[entry.type] ?? '#9CA3AF' }}>{entry.text}</p>)}
+                        {activeModal.battleLog.slice(0, visibleLogLines).map((entry, i) => (
+                          <p
+                            key={i}
+                            style={{
+                              color: LOG_LINE_COLOR[entry.type] ?? '#9CA3AF',
+                              animation: i === visibleLogLines - 1 ? 'fade-up 0.3s ease-out' : 'none',
+                            }}
+                          >{entry.text}</p>
+                        ))}
                       </div>
                       <div className="bg-black/40 rounded-xl p-4 mb-4 border border-white/5 text-sm space-y-2">
                         {activeModal.expGained > 0 && <p className="text-[#32D74B] tracking-widest">靈氣 +{activeModal.expGained}</p>}

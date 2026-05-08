@@ -125,13 +125,13 @@ function calcStonesReward(tier, result, attribute) {
 
 function resultMessage(result, stones) {
   if (result === 'good_drop' || result === 'good' || result === 'good_trade' || result === 'full_clear') {
-    return `收穫頗豐！獲得 ${stones} 靈石。`;
+    return `此地機緣已被道友悉數納入袋中，共獲靈石 ${stones} 枚。`;
   }
-  if (result === 'rare_drop') return `意外之喜！獲得稀有掉落，另獲 ${stones} 靈石。`;
-  if (result === 'nothing')   return '此地已無靈機，空手而歸。';
-  if (result === 'failure')   return '行動失敗，有所損傷。';
-  if (result === 'trap')      return '中計了！受到些許損傷。';
-  if (result === 'downgrade') return '機緣已散，事件降階。';
+  if (result === 'rare_drop') return `一道金光閃過！竟有法寶出世之兆，驚喜之餘另獲靈石 ${stones} 枚。`;
+  if (result === 'nothing')   return '靈機散盡，看來此地造化已與道友無緣，空手而歸。';
+  if (result === 'failure')   return '此行不利，不僅未得機緣，反倒損了幾分修為氣息。';
+  if (result === 'trap')      return '不好，此地竟伏有凶險陣法！道友躲避不及，受了些許輕傷。';
+  if (result === 'downgrade') return '四周靈氣忽地混亂，機緣恐怕正在消散...';
   if (stones > 0)             return `事件結束，獲得 ${stones} 靈石。`;
   return `事件結束（${result}）。`;
 }
@@ -173,7 +173,13 @@ export async function scanForEvent(playerId, poiType, weather) {
   }
   if (!er.rows.length) throw new Error('事件池尚無資料，請稍後再試');
 
-  const event = parseEvent(er.rows[0]);
+  const rawRow = er.rows[0];
+  // 強制轉換數值欄位，避免資料庫驅動回傳字串導致 Zod 驗證失敗
+  if (typeof rawRow.base_rare_rate === 'string') {
+    rawRow.base_rare_rate = parseFloat(rawRow.base_rare_rate);
+  }
+
+  const event = parseEvent(rawRow);
   const startLayer = calcStartLayer(player.god_sense, event.hidden_level, event.total_layers);
 
   // 清除舊的未完成 inference 事件（避免殘留累積）
@@ -248,7 +254,7 @@ export async function takeAction(playerEventId, playerId, action) {
       );
       return { result: 'retreat', message: '道友選擇撤退，安全離開此地。', phase: 'completed' };
     }
-    throw new Error('互動期請使用結算介面（POST /api/explore/resolve）');
+    throw new Error('請進行最後的選擇（結算）');
   }
 
   // retreat during inference
@@ -340,8 +346,8 @@ export async function takeAction(playerEventId, playerId, action) {
     phase:             newPhase,
     next_layer_text:   nextText,
     message: isCorrect
-      ? '此舉甚妙，靈氣感應清晰了幾分。'
-      : `動作有些不妥，驚動了此地靈氣。（驚動值 +${alertAdd}）`,
+      ? '應對極其得當，前方雲霧散去，氣息愈發明朗。'
+      : `此舉似乎驚擾了四周隱秘的靈壓...（驚動值上升 ${alertAdd}）`,
   };
 }
 
