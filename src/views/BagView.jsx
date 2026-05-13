@@ -286,12 +286,6 @@ export default function BagView() {
     setTimeout(() => setViewState('detail'), 400);
   };
 
-  const handleAction = (action) => {
-    if (!selectedItem) return;
-    triggerHaptic([30, 50, 30]);
-    alert(`對 [${selectedItem.name}] 執行了：${action}`);
-  };
-
   // ── 計算 ───────────────────────────────────────────────
   const currentItems  = inventory[activeTab] ?? [];
   const displayGrid   = Array.from({ length: TOTAL_SLOTS }).map((_, i) => currentItems[i] ?? null);
@@ -885,13 +879,6 @@ export default function BagView() {
             )}
 
             <div className="px-[5cqw] flex gap-[4cqw] pb-[4cqw] w-full max-w-[500px] mx-auto">
-              <button
-                onClick={() => handleAction('銷毀')}
-                className="flex-1 py-3 rounded-full text-[clamp(16px,4.5cqw,20px)] tracking-[0.5em] transition-all duration-300 border backdrop-blur-sm border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/10 hover:bg-[#FF3B30]/20 shadow-[0_0_15px_rgba(255,59,48,0.2)] active:scale-95"
-              >
-                銷毀
-              </button>
-
               {selectedItem?.equip_slot ? (
                 <button
                   onClick={handleEquipItem}
@@ -908,14 +895,7 @@ export default function BagView() {
                 >
                   {isUsingItem ? '...' : '使用'}
                 </button>
-              ) : (
-                <button
-                  onClick={() => handleAction('合成')}
-                  className="flex-1 py-3 rounded-full text-[clamp(16px,4.5cqw,20px)] tracking-[0.5em] transition-all duration-300 border backdrop-blur-sm border-[#00E5FF] text-[#00E5FF] bg-[#00E5FF]/10 hover:bg-[#00E5FF]/20 shadow-[0_0_15px_rgba(0,229,255,0.2)] active:scale-95"
-                >
-                  合成
-                </button>
-              )}
+              ) : null}
             </div>
 
             <div className="px-[6cqw] pb-[6cqw] flex justify-between items-center w-full max-w-[500px] mx-auto">

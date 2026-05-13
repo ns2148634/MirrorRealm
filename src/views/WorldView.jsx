@@ -5,7 +5,6 @@ import useGameStore from '../store/gameStore';
 // ── L1：五大主節點 ────────────────────────────────────────────────
 const TABS = [
   { id: 'market',   label: '仙坊', color: '#FFD700', pos: { top: '25%', left: '25%' }, delay: '0s'   },
-  { id: 'bounty',   label: '懸賞', color: '#FF3B30', pos: { top: '20%', left: '75%' }, delay: '1.2s' },
   { id: 'friend',   label: '道友', color: '#32D74B', pos: { top: '50%', left: '50%' }, delay: '2.5s' },
   { id: 'sect',     label: '宗門', color: '#00E5FF', pos: { top: '75%', left: '25%' }, delay: '0.8s' },
   { id: 'settings', label: '天機', color: '#9B5CFF', pos: { top: '80%', left: '75%' }, delay: '1.7s' },
@@ -157,8 +156,7 @@ export default function WorldView() {
       setViewState('tutorial-market');
       return;
     }
-    // 一般子節點 → 未來可進入詳情
-    alert(`【${node.label}】尚未開放，敬請期待。`);
+    // 一般子節點 → 尚未開放，靜默返回
   };
 
   // ── 確認動作 ─────────────────────────────────────────────────
